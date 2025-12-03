@@ -714,8 +714,28 @@ static GList *meta_protocol_get_account_options(void)
     options = g_list_append(options, opt);
     
     /* Meta App ID (required for Messenger OAuth) */
-    opt = purple_account_option_string_new("Meta App ID (for Messenger)",
+    opt = purple_account_option_string_new("Meta App ID",
                                             "oauth_client_id", "");
+    options = g_list_append(options, opt);
+    
+    /* Meta App Secret (required for Messenger OAuth) */
+    opt = purple_account_option_string_new("Meta App Secret",
+                                            "oauth_client_secret", "");
+    options = g_list_append(options, opt);
+    
+    /* Show online status */
+    opt = purple_account_option_bool_new("Show online status",
+                                          "presence_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Typing indicators */
+    opt = purple_account_option_bool_new("Send typing indicators",
+                                          "typing_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Read receipts */
+    opt = purple_account_option_bool_new("Send read receipts",
+                                          "read_receipts_enabled", TRUE);
     options = g_list_append(options, opt);
     
     /* Instagram rate limit - important to avoid bans */
