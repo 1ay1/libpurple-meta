@@ -25,38 +25,22 @@ Grab the DLL from the Releases page and drop it in:
 C:\Program Files\Pidgin\plugins\prpl-meta.dll
 ```
 
-### 2. Set Up Your Config
-
-Create a file called `meta-config.json` in your purple config folder:
-- Linux/Mac: `~/.purple/meta-config.json`
-- Windows: `%APPDATA%\.purple\meta-config.json`
-
-Put this in it:
-
-```json
-{
-  "version": 1,
-  "features": {
-    "instagram_enabled": true
-  },
-  "instagram": {
-    "rate_limit_calls": 50,
-    "min_request_interval_ms": 500
-  }
-}
-```
-
-### 3. Add Your Account
+### 2. Add Your Account
 
 Open Pidgin:
 1. Go to **Accounts → Manage Accounts → Add**
 2. Pick **Meta (Messenger + Instagram)** from the dropdown
 3. Put in your Instagram username
-4. Click the **Advanced** tab
-5. Change **Service Mode** to `instagram`
-6. Hit **Add**
+4. Click the **Advanced** tab and configure:
+   - **Service**: Select `Instagram DMs`
+   - **Enable Instagram**: Check this box
+   - **Instagram: Max API calls per hour**: `50` (conservative, avoids bans)
+   - **Instagram: Min request interval (ms)**: `500` (or higher to be safe)
+5. Hit **Add**
 
-### 4. Log In
+> **Tip:** All configuration is now available in the account settings UI - no need to edit JSON files!
+
+### 3. Log In
 
 Enable the account and you should get a login prompt. If you have 2FA enabled (you should!), you'll need to enter your code.
 
@@ -76,27 +60,20 @@ You need to register an app with Meta first (yeah, it's annoying):
 4. Copy your **App ID** somewhere
 5. In settings, add `https://localhost/oauth/callback` as a valid redirect URI
 
-### 2. Create Config File
+See the [Meta App Setup Guide](META_APP_SETUP.md) for detailed instructions.
 
-```json
-{
-  "version": 1,
-  "features": {
-    "messenger_enabled": true
-  },
-  "messenger": {
-    "oauth_client_id": "YOUR_APP_ID_HERE"
-  }
-}
-```
-
-### 3. Add Your Account
+### 2. Add Your Account
 
 1. **Accounts → Manage Accounts → Add** in Pidgin
 2. Pick **Meta (Messenger + Instagram)**
 3. Use your Facebook email as username
-4. **Advanced** tab → set **Service Mode** to `messenger`
+4. Click the **Advanced** tab and configure:
+   - **Service**: Select `Facebook Messenger`
+   - **Meta App ID (for Messenger)**: Paste your App ID here
+   - **Enable Messenger**: Check this box
 5. Click **Add**
+
+> **Note:** The App ID is now entered directly in Pidgin's account settings - no JSON file needed!
 
 ### 4. Authorize
 

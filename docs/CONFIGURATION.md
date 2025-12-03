@@ -18,14 +18,32 @@ This guide explains how to configure the libpurple-meta plugin for use with Face
 
 ## Overview
 
-libpurple-meta uses a JSON configuration file (`meta-config.json`) to manage endpoints, rate limits, feature flags, and security settings. This allows you to:
+libpurple-meta can be configured in two ways:
+
+### 1. Account Settings UI (Recommended for most users)
+
+Most important settings are now available directly in Pidgin's account settings dialog. When you add or modify a Meta account, click the **Advanced** tab to access:
+
+- **Service selection** (Messenger, Instagram, or both)
+- **Meta App ID** (required for Messenger OAuth)
+- **Feature toggles** (presence, typing indicators, reactions, etc.)
+- **Rate limits** (to avoid bans)
+- **Instagram app version** (for compatibility updates)
+- **Debug options**
+
+This is the easiest way to configure the plugin - no file editing required!
+
+### 2. JSON Configuration File (Advanced)
+
+For advanced settings or system-wide defaults, you can use a JSON configuration file (`meta-config.json`). This allows you to:
 
 - Update API endpoints without recompiling
-- Adjust rate limits to avoid bans
-- Enable/disable specific features
-- Configure security settings
+- Set defaults that apply to all accounts
+- Configure settings not exposed in the UI
 
-The plugin will work with default values if no configuration file is found, but you may want to customize settings for your use case.
+**Priority:** Account settings (UI) take precedence over JSON config values.
+
+The plugin will work with default values if no configuration is provided.
 
 ---
 

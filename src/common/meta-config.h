@@ -392,4 +392,50 @@ void meta_config_destroy(MetaConfig *config);
  */
 MetaConfig *meta_config_copy(MetaConfig *config);
 
+/* ============================================================
+ * Account-Aware Configuration Getters
+ * 
+ * These functions check the account settings (UI) first, then
+ * fall back to the JSON config file. This allows users to set
+ * options in Pidgin's account settings without editing JSON.
+ * ============================================================ */
+
+/* OAuth / Messenger settings */
+const gchar *meta_config_get_oauth_client_id_for_account(PurpleAccount *account);
+const gchar *meta_config_get_oauth_redirect_uri_for_account(PurpleAccount *account);
+
+/* Feature toggles */
+gboolean meta_config_is_messenger_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_instagram_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_presence_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_typing_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_read_receipts_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_reactions_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_attachments_enabled_for_account(PurpleAccount *account);
+gboolean meta_config_is_group_chats_enabled_for_account(PurpleAccount *account);
+
+/* Rate limiting */
+guint meta_config_get_messenger_rate_limit_for_account(PurpleAccount *account);
+guint meta_config_get_messenger_min_interval_for_account(PurpleAccount *account);
+guint meta_config_get_instagram_rate_limit_for_account(PurpleAccount *account);
+guint meta_config_get_instagram_min_interval_for_account(PurpleAccount *account);
+
+/* Instagram-specific */
+const gchar *meta_config_get_ig_app_version_for_account(PurpleAccount *account);
+const gchar *meta_config_get_ig_version_code_for_account(PurpleAccount *account);
+gboolean meta_config_is_ig_pending_inbox_enabled_for_account(PurpleAccount *account);
+
+/* Connection settings */
+guint meta_config_get_reconnect_delay_for_account(PurpleAccount *account);
+guint meta_config_get_max_reconnect_attempts_for_account(PurpleAccount *account);
+
+/* Security settings */
+gboolean meta_config_get_warn_plaintext_for_account(PurpleAccount *account);
+gboolean meta_config_get_obfuscate_tokens_for_account(PurpleAccount *account);
+
+/* Debug settings */
+gboolean meta_config_get_debug_mode_for_account(PurpleAccount *account);
+gboolean meta_config_get_log_api_calls_for_account(PurpleAccount *account);
+gboolean meta_config_get_log_websocket_for_account(PurpleAccount *account);
+
 #endif /* META_CONFIG_H */

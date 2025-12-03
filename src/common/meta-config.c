@@ -959,3 +959,307 @@ void meta_config_check_update_async(GCallback callback, gpointer user_data)
      * 5. Optionally auto-update
      */
 }
+
+/* ============================================================
+ * Account-Aware Configuration Getters
+ * 
+ * These functions check the account settings (UI) first, then
+ * fall back to the JSON config file. This allows users to set
+ * options in Pidgin's account settings without editing JSON.
+ * ============================================================ */
+
+const gchar *meta_config_get_oauth_client_id_for_account(PurpleAccount *account)
+{
+    const gchar *value;
+    
+    if (account) {
+        value = purple_account_get_string(account, "oauth_client_id", NULL);
+        if (value && value[0] != '\0') {
+            return value;
+        }
+    }
+    
+    /* Fall back to JSON config */
+    MetaConfig *config = meta_config_get();
+    return config->messenger.oauth_client_id;
+}
+
+const gchar *meta_config_get_oauth_redirect_uri_for_account(PurpleAccount *account)
+{
+    const gchar *value;
+    
+    if (account) {
+        value = purple_account_get_string(account, "oauth_redirect_uri", NULL);
+        if (value && value[0] != '\0') {
+            return value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->messenger.oauth_redirect_uri;
+}
+
+gboolean meta_config_is_messenger_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        /* Check if setting exists, if so use it */
+        if (purple_account_get_string(account, "messenger_enabled", NULL) != NULL ||
+            purple_account_get_bool(account, "messenger_enabled", TRUE) != TRUE) {
+            return purple_account_get_bool(account, "messenger_enabled", TRUE);
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.messenger_enabled;
+}
+
+gboolean meta_config_is_instagram_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "instagram_enabled", 
+                                       meta_config_get()->features.instagram_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.instagram_enabled;
+}
+
+gboolean meta_config_is_presence_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "presence_enabled",
+                                       meta_config_get()->features.presence_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.presence_enabled;
+}
+
+gboolean meta_config_is_typing_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "typing_enabled",
+                                       meta_config_get()->features.typing_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.typing_enabled;
+}
+
+gboolean meta_config_is_read_receipts_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "read_receipts_enabled",
+                                       meta_config_get()->features.read_receipts_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.read_receipts_enabled;
+}
+
+gboolean meta_config_is_reactions_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "reactions_enabled",
+                                       meta_config_get()->features.reactions_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.reactions_enabled;
+}
+
+gboolean meta_config_is_attachments_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "attachments_enabled",
+                                       meta_config_get()->features.attachments_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.attachments_enabled;
+}
+
+gboolean meta_config_is_group_chats_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "group_chats_enabled",
+                                       meta_config_get()->features.group_chats_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.group_chats_enabled;
+}
+
+guint meta_config_get_messenger_rate_limit_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "messenger_rate_limit", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->messenger.rate_limit_calls;
+}
+
+guint meta_config_get_messenger_min_interval_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "messenger_min_interval", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->messenger.min_request_interval_ms;
+}
+
+guint meta_config_get_instagram_rate_limit_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "instagram_rate_limit", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->instagram.rate_limit_calls;
+}
+
+guint meta_config_get_instagram_min_interval_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "instagram_min_interval", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->instagram.min_request_interval_ms;
+}
+
+const gchar *meta_config_get_ig_app_version_for_account(PurpleAccount *account)
+{
+    const gchar *value;
+    
+    if (account) {
+        value = purple_account_get_string(account, "ig_app_version", NULL);
+        if (value && value[0] != '\0') {
+            return value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->instagram.app_version;
+}
+
+const gchar *meta_config_get_ig_version_code_for_account(PurpleAccount *account)
+{
+    const gchar *value;
+    
+    if (account) {
+        value = purple_account_get_string(account, "ig_version_code", NULL);
+        if (value && value[0] != '\0') {
+            return value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->instagram.version_code;
+}
+
+gboolean meta_config_is_ig_pending_inbox_enabled_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "ig_pending_inbox_enabled",
+                                       meta_config_get()->features.ig_pending_inbox_enabled);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->features.ig_pending_inbox_enabled;
+}
+
+guint meta_config_get_reconnect_delay_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "reconnect_delay", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->websocket.reconnect_delay;
+}
+
+guint meta_config_get_max_reconnect_attempts_for_account(PurpleAccount *account)
+{
+    if (account) {
+        int value = purple_account_get_int(account, "max_reconnect_attempts", 0);
+        if (value > 0) {
+            return (guint)value;
+        }
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->websocket.max_reconnect_attempts;
+}
+
+gboolean meta_config_get_warn_plaintext_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "warn_plaintext_storage",
+                                       meta_config_get()->security.warn_plaintext_storage);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->security.warn_plaintext_storage;
+}
+
+gboolean meta_config_get_obfuscate_tokens_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "obfuscate_tokens",
+                                       meta_config_get()->security.obfuscate_tokens);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->security.obfuscate_tokens;
+}
+
+gboolean meta_config_get_debug_mode_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "debug_mode",
+                                       meta_config_get()->debug_mode);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->debug_mode;
+}
+
+gboolean meta_config_get_log_api_calls_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "log_api_calls",
+                                       meta_config_get()->log_api_calls);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->log_api_calls;
+}
+
+gboolean meta_config_get_log_websocket_for_account(PurpleAccount *account)
+{
+    if (account) {
+        return purple_account_get_bool(account, "log_websocket",
+                                       meta_config_get()->log_websocket);
+    }
+    
+    MetaConfig *config = meta_config_get();
+    return config->log_websocket;
+}

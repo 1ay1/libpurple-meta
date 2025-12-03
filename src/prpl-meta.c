@@ -691,11 +691,14 @@ static GList *meta_protocol_get_account_options(void)
 {
     GList *options = NULL;
     PurpleAccountOption *opt;
+    PurpleKeyValuePair *kvp;
+    GList *mode_list = NULL;
+    
+    /* ================================================================
+     * BASIC SETTINGS
+     * ================================================================ */
     
     /* Service mode dropdown */
-    GList *mode_list = NULL;
-    PurpleKeyValuePair *kvp;
-    
     kvp = g_new0(PurpleKeyValuePair, 1);
     kvp->key = g_strdup("Facebook Messenger");
     kvp->value = g_strdup("messenger");
@@ -714,10 +717,113 @@ static GList *meta_protocol_get_account_options(void)
     opt = purple_account_option_list_new("Service", "service_mode", mode_list);
     options = g_list_append(options, opt);
     
+    /* ================================================================
+     * MESSENGER / OAUTH SETTINGS
+     * ================================================================ */
+    
+    /* Meta App ID (required for Messenger OAuth) */
+    opt = purple_account_option_string_new("Meta App ID (for Messenger)",
+                                            "oauth_client_id", "");
+    options = g_list_append(options, opt);
+    
+    /* OAuth Redirect URI */
+    opt = purple_account_option_string_new("OAuth Redirect URI",
+                                            "oauth_redirect_uri",
+                                            "https://localhost/oauth/callback");
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * FEATURE TOGGLES
+     * ================================================================ */
+    
+    /* Enable Messenger */
+    opt = purple_account_option_bool_new("Enable Messenger",
+                                          "messenger_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Enable Instagram */
+    opt = purple_account_option_bool_new("Enable Instagram",
+                                          "instagram_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
     /* Show presence toggle */
     opt = purple_account_option_bool_new("Show online status to others",
-                                          "show_presence", TRUE);
+                                          "presence_enabled", TRUE);
     options = g_list_append(options, opt);
+    
+    /* Typing indicators */
+    opt = purple_account_option_bool_new("Send typing indicators",
+                                          "typing_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Read receipts */
+    opt = purple_account_option_bool_new("Send read receipts",
+                                          "read_receipts_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Reactions */
+    opt = purple_account_option_bool_new("Enable message reactions",
+                                          "reactions_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Attachments */
+    opt = purple_account_option_bool_new("Enable attachments (images/files)",
+                                          "attachments_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Group chats */
+    opt = purple_account_option_bool_new("Enable group chats",
+                                          "group_chats_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * RATE LIMITING (Important to avoid bans)
+     * ================================================================ */
+    
+    /* Messenger rate limit */
+    opt = purple_account_option_int_new("Messenger: Max API calls per hour",
+                                         "messenger_rate_limit", 200);
+    options = g_list_append(options, opt);
+    
+    /* Messenger min interval */
+    opt = purple_account_option_int_new("Messenger: Min request interval (ms)",
+                                         "messenger_min_interval", 100);
+    options = g_list_append(options, opt);
+    
+    /* Instagram rate limit */
+    opt = purple_account_option_int_new("Instagram: Max API calls per hour",
+                                         "instagram_rate_limit", 100);
+    options = g_list_append(options, opt);
+    
+    /* Instagram min interval (more conservative) */
+    opt = purple_account_option_int_new("Instagram: Min request interval (ms)",
+                                         "instagram_min_interval", 200);
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * INSTAGRAM-SPECIFIC SETTINGS
+     * ================================================================ */
+    
+    /* Instagram app version (may need updates) */
+    opt = purple_account_option_string_new("Instagram app version",
+                                            "ig_app_version",
+                                            "275.0.0.27.98");
+    options = g_list_append(options, opt);
+    
+    /* Instagram version code */
+    opt = purple_account_option_string_new("Instagram version code",
+                                            "ig_version_code",
+                                            "458229237");
+    options = g_list_append(options, opt);
+    
+    /* Instagram pending inbox (message requests) */
+    opt = purple_account_option_bool_new("Show Instagram message requests",
+                                          "ig_pending_inbox_enabled", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * CONNECTION SETTINGS
+     * ================================================================ */
     
     /* Sync history toggle */
     opt = purple_account_option_bool_new("Sync message history on connect",
@@ -734,9 +840,47 @@ static GList *meta_protocol_get_account_options(void)
                                           "auto_read", TRUE);
     options = g_list_append(options, opt);
     
+    /* Reconnect delay */
+    opt = purple_account_option_int_new("Reconnect delay (seconds)",
+                                         "reconnect_delay", 5);
+    options = g_list_append(options, opt);
+    
+    /* Max reconnect attempts */
+    opt = purple_account_option_int_new("Max reconnect attempts",
+                                         "max_reconnect_attempts", 10);
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * SECURITY SETTINGS
+     * ================================================================ */
+    
+    /* Warn about plaintext storage */
+    opt = purple_account_option_bool_new("Warn about plaintext token storage",
+                                          "warn_plaintext_storage", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Obfuscate tokens */
+    opt = purple_account_option_bool_new("Obfuscate stored tokens",
+                                          "obfuscate_tokens", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* ================================================================
+     * DEBUG SETTINGS
+     * ================================================================ */
+    
     /* Debug mode */
     opt = purple_account_option_bool_new("Enable debug logging",
                                           "debug_mode", FALSE);
+    options = g_list_append(options, opt);
+    
+    /* Log API calls */
+    opt = purple_account_option_bool_new("Log API calls (verbose)",
+                                          "log_api_calls", FALSE);
+    options = g_list_append(options, opt);
+    
+    /* Log WebSocket traffic */
+    opt = purple_account_option_bool_new("Log WebSocket traffic (very verbose)",
+                                          "log_websocket", FALSE);
     options = g_list_append(options, opt);
     
     return options;
