@@ -27,11 +27,9 @@
  * ============================================================ */
 
 #if PURPLE_VERSION == 2
-#  define PURPLE_CONNECTION_STATE_CONNECTED  PURPLE_CONNECTED
-#  define PURPLE_CONNECTION_STATE_CONNECTING PURPLE_CONNECTING
+#  define PURPLE_CONNECTION_STATE_CONNECTED    PURPLE_CONNECTED
+#  define PURPLE_CONNECTION_STATE_CONNECTING   PURPLE_CONNECTING
 #  define PURPLE_CONNECTION_STATE_DISCONNECTED PURPLE_DISCONNECTED
-#else
-/* libpurple 3 uses these names directly */
 #endif
 
 /* ============================================================
@@ -53,6 +51,15 @@
 /* libpurple 2 uses purple_connection_error_reason with 3 args */
 #  define purple_connection_error(gc, reason_enum, message) \
        purple_connection_error_reason(gc, reason_enum, message)
+#endif
+
+/* ============================================================
+ * Status Functions
+ * ============================================================ */
+
+#if PURPLE_VERSION == 2
+#  define purple_status_get_status_type(status) \
+       purple_status_get_type(status)
 #endif
 
 /* ============================================================
@@ -93,22 +100,20 @@
 #endif
 
 /* ============================================================
- * Notify Dialogs
+ * Account Options
  * ============================================================ */
 
 #if PURPLE_VERSION == 2
-/* libpurple 2 notify functions take 4 args, not 5 */
-/* We ignore the 5th arg (user_data) */
-#  define purple_notify_info_compat(handle, title, primary, secondary) \
-       purple_notify_info(handle, title, primary, secondary)
-#  define purple_notify_warning_compat(handle, title, primary, secondary) \
-       purple_notify_warning(handle, title, primary, secondary)
-#  define purple_notify_error_compat(handle, title, primary, secondary) \
-       purple_notify_error(handle, title, primary, secondary)
+#  define purple_account_option_string_new_compat(text, pref_name, default_val) \
+       purple_account_option_string_new(text, pref_name, default_val)
+#  define purple_account_option_bool_new_compat(text, pref_name, default_val) \
+       purple_account_option_bool_new(text, pref_name, default_val)
+#  define purple_account_option_int_new_compat(text, pref_name, default_val) \
+       purple_account_option_int_new(text, pref_name, default_val)
 #else
-#  define purple_notify_info_compat    purple_notify_info
-#  define purple_notify_warning_compat purple_notify_warning
-#  define purple_notify_error_compat   purple_notify_error
+#  define purple_account_option_string_new_compat purple_account_option_string_new
+#  define purple_account_option_bool_new_compat   purple_account_option_bool_new
+#  define purple_account_option_int_new_compat    purple_account_option_int_new
 #endif
 
 /* ============================================================
@@ -128,33 +133,14 @@
 #endif
 
 /* ============================================================
- * Account Options
+ * Value Types
  * ============================================================ */
 
 #if PURPLE_VERSION == 2
-/* Use the old-style option creation */
-#  define purple_account_option_string_new_compat(text, pref_name, default_val) \
-       purple_account_option_string_new(text, pref_name, default_val)
-#  define purple_account_option_bool_new_compat(text, pref_name, default_val) \
-       purple_account_option_bool_new(text, pref_name, default_val)
-#  define purple_account_option_int_new_compat(text, pref_name, default_val) \
-       purple_account_option_int_new(text, pref_name, default_val)
-#else
-#  define purple_account_option_string_new_compat purple_account_option_string_new
-#  define purple_account_option_bool_new_compat   purple_account_option_bool_new
-#  define purple_account_option_int_new_compat    purple_account_option_int_new
-#endif
-
-/* ============================================================
- * Protocol Plugin Info
- * ============================================================ */
-
-#if PURPLE_VERSION == 2
-/* libpurple 2 uses PurplePluginProtocolInfo struct */
-#  define META_PRPL_INFO_INIT(info) \
-       static PurplePluginProtocolInfo info = { \
-           .options = OPT_PROTO_CHAT_TOPIC | OPT_PROTO_IM_IMAGE, \
-       }
+/* libpurple 2 has its own type system */
+#  ifndef PURPLE_TYPE_STRING
+#    define PURPLE_TYPE_STRING G_TYPE_STRING
+#  endif
 #endif
 
 /* ============================================================
@@ -164,11 +150,19 @@
 /* Safe string handling */
 static inline const char *purple_compat_normalize(PurpleAccount *account, const char *str)
 {
-#if PURPLE_VERSION == 2
     return purple_normalize(account, str);
-#else
-    return purple_normalize(account, str);
-#endif
+}
+
+/* Connection state helper */
+static inline void purple_connection_set_state_compat(PurpleConnection *gc, int state)
+{
+    purple_connection_set_state(gc, state);
+}
+
+/* Get account from connection */
+static inline PurpleAccount *purple_connection_get_account_compat(PurpleConnection *gc)
+{
+    return purple_connection_get_account(gc);
 }
 
 #endif /* PURPLE_COMPAT_H */

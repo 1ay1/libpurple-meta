@@ -11,9 +11,23 @@
 #include "messenger.h"
 #include "../common/meta-auth.h"
 #include "../common/meta-websocket.h"
+#include "../common/meta-http.h"
+#include "../common/purple-compat.h"
 #include <json-glib/json-glib.h>
 #include <string.h>
 #include <time.h>
+
+/* Forward declarations for HTTP callbacks - use unified MetaHttp* types */
+static void messenger_send_message_cb(MetaHttpResponse *response, gpointer user_data);
+static void messenger_threads_cb(MetaHttpResponse *response, gpointer user_data);
+static void messenger_messages_cb(MetaHttpResponse *response, gpointer user_data);
+static void messenger_attachment_cb(MetaHttpResponse *response, gpointer user_data);
+static void messenger_profile_cb(MetaHttpResponse *response, gpointer user_data);
+
+/* Forward declarations for internal functions */
+static gboolean messenger_send_message_http(MetaAccount *account, const char *to,
+                                             const char *message);
+static void messenger_fetch_profile_async(MetaAccount *account);
 
 /* Rate limiting: max 200 calls per hour */
 #define MESSENGER_RATE_LIMIT_CALLS   200
@@ -294,7 +308,7 @@ static gboolean messenger_send_message_http(MetaAccount *account, const char *to
                                              const char *message)
 {
     MessengerData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     JsonBuilder *builder;
     JsonGenerator *gen;
     gchar *json_str;
@@ -333,14 +347,14 @@ static gboolean messenger_send_message_http(MetaAccount *account, const char *to
                           MESSENGER_SEND_API, data->user_access_token);
     
     /* Create and send request */
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_header_set(request, "Content-Type", "application/json");
-    purple_http_request_set_contents(request, json_str, strlen(json_str));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_header(request, "Content-Type", "application/json");
+    meta_http_request_set_body(request, json_str, strlen(json_str));
     
-    purple_http_request(account->pc, request, messenger_send_message_cb, account);
+    meta_http_request_execute(account->pc, request, messenger_send_message_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(json_str);
     g_object_unref(gen);
@@ -349,14 +363,13 @@ static gboolean messenger_send_message_http(MetaAccount *account, const char *to
     return TRUE;
 }
 
-static void messenger_send_message_cb(PurpleHttpConnection *connection,
-                                       PurpleHttpResponse *response,
+static void messenger_send_message_cb(MetaHttpResponse *response,
                                        gpointer user_data)
 {
-    MetaAccount *account = user_data;
+    (void)user_data;
     
-    if (!purple_http_response_is_successful(response)) {
-        int code = purple_http_response_get_code(response);
+    if (!meta_http_response_is_successful(response)) {
+        int code = meta_http_response_get_code(response);
         meta_error("Failed to send message via HTTP: %d", code);
         return;
     }
@@ -550,7 +563,7 @@ gboolean messenger_send_attachment(MetaAccount *account, const char *to,
                                     MessengerAttachmentType type)
 {
     MessengerData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     gchar *file_contents;
     gsize file_size;
@@ -623,14 +636,14 @@ gboolean messenger_send_attachment(MetaAccount *account, const char *to,
     gchar *json_str = json_generator_to_data(gen, NULL);
     
     /* Create request - in practice would need proper multipart encoding */
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_header_set(request, "Content-Type", "application/json");
-    purple_http_request_set_contents(request, json_str, strlen(json_str));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_header(request, "Content-Type", "application/json");
+    meta_http_request_set_body(request, json_str, strlen(json_str));
     
-    purple_http_request(account->pc, request, messenger_attachment_cb, account);
+    meta_http_request_execute(account->pc, request, messenger_attachment_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(json_str);
     g_free(file_contents);
@@ -640,12 +653,12 @@ gboolean messenger_send_attachment(MetaAccount *account, const char *to,
     return TRUE;
 }
 
-static void messenger_attachment_cb(PurpleHttpConnection *connection,
-                                     PurpleHttpResponse *response,
+static void messenger_attachment_cb(MetaHttpResponse *response,
+                                     
                                      gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
-        int code = purple_http_response_get_code(response);
+    if (!meta_http_response_is_successful(response)) {
+        int code = meta_http_response_get_code(response);
         meta_error("Failed to upload attachment: %d", code);
         return;
     }
@@ -678,7 +691,7 @@ static GList *service_get_threads(MetaAccount *account)
 GList *messenger_get_threads(MetaAccount *account)
 {
     MessengerData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     GList *threads = NULL;
     
@@ -696,12 +709,12 @@ GList *messenger_get_threads(MetaAccount *account)
                                    "limit", "50",
                                    NULL);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
-    purple_http_request(account->pc, request, messenger_threads_cb, account);
+    meta_http_request_execute(account->pc, request, messenger_threads_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     
     messenger_record_api_call(data);
@@ -709,8 +722,8 @@ GList *messenger_get_threads(MetaAccount *account)
     return threads;  /* Will be populated async */
 }
 
-static void messenger_threads_cb(PurpleHttpConnection *connection,
-                                  PurpleHttpResponse *response,
+static void messenger_threads_cb(MetaHttpResponse *response,
+                                  
                                   gpointer user_data)
 {
     MetaAccount *account = user_data;
@@ -718,12 +731,12 @@ static void messenger_threads_cb(PurpleHttpConnection *connection,
     gsize response_len;
     GList *threads;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_error("Failed to fetch threads");
         return;
     }
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     threads = messenger_parse_threads(response_data);
     
@@ -773,7 +786,7 @@ GList *messenger_get_thread_messages(MetaAccount *account,
                                       const char *before_cursor)
 {
     MessengerData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     gchar *limit_str;
     
@@ -802,12 +815,12 @@ GList *messenger_get_thread_messages(MetaAccount *account,
                                        NULL);
     }
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
-    purple_http_request(account->pc, request, messenger_messages_cb, account);
+    meta_http_request_execute(account->pc, request, messenger_messages_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(endpoint);
     g_free(limit_str);
@@ -817,20 +830,20 @@ GList *messenger_get_thread_messages(MetaAccount *account,
     return NULL;  /* Async */
 }
 
-static void messenger_messages_cb(PurpleHttpConnection *connection,
-                                   PurpleHttpResponse *response,
+static void messenger_messages_cb(MetaHttpResponse *response,
+                                   
                                    gpointer user_data)
 {
     const gchar *response_data;
     gsize response_len;
     GList *messages;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_error("Failed to fetch messages");
         return;
     }
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     messages = messenger_parse_messages(response_data);
     
     /* Messages are delivered to libpurple via conversation */
@@ -951,9 +964,8 @@ PurpleStatusPrimitive messenger_get_presence(MetaAccount *account,
 
 static gboolean messenger_presence_poll_cb(gpointer user_data)
 {
-    MetaAccount *account = user_data;
+    (void)user_data;  /* Presence is typically received via WebSocket */
     
-    /* Presence is typically received via WebSocket, but we can poll as fallback */
     meta_debug("Presence poll tick");
     
     return G_SOURCE_CONTINUE;
@@ -1004,7 +1016,7 @@ void messenger_stop_presence_polling(MetaAccount *account)
 static void messenger_fetch_profile_async(MetaAccount *account)
 {
     MessengerData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     
     if (!account) return;
@@ -1017,17 +1029,17 @@ static void messenger_fetch_profile_async(MetaAccount *account)
                                    "fields", "id,name,picture",
                                    NULL);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
-    purple_http_request(account->pc, request, messenger_profile_cb, account);
+    meta_http_request_execute(account->pc, request, messenger_profile_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
 }
 
-static void messenger_profile_cb(PurpleHttpConnection *connection,
-                                  PurpleHttpResponse *response,
+static void messenger_profile_cb(MetaHttpResponse *response,
+                                  
                                   gpointer user_data)
 {
     MetaAccount *account = user_data;
@@ -1037,7 +1049,7 @@ static void messenger_profile_cb(PurpleHttpConnection *connection,
     JsonParser *parser;
     JsonObject *root;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_warning("Failed to fetch user profile");
         return;
     }
@@ -1045,7 +1057,7 @@ static void messenger_profile_cb(PurpleHttpConnection *connection,
     data = messenger_get_data(account);
     if (!data) return;
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     parser = json_parser_new();
     if (json_parser_load_from_data(parser, response_data, response_len, NULL)) {
@@ -1224,11 +1236,9 @@ gchar *messenger_build_api_url(const char *endpoint, const char *access_token, .
     GString *url;
     va_list args;
     const char *key, *value;
-    gboolean first_param;
     
     url = g_string_new(endpoint);
     g_string_append_printf(url, "?access_token=%s", access_token);
-    first_param = FALSE;
     
     va_start(args, access_token);
     while ((key = va_arg(args, const char *)) != NULL) {

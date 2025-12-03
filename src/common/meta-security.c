@@ -98,8 +98,6 @@ void meta_security_context_free(MetaSecurityContext *ctx)
 
 void meta_security_warn_plaintext_storage(MetaAccount *account)
 {
-    MetaSecurityContext *ctx;
-    
     if (!account) return;
     
     /* Get or create security context */

@@ -777,8 +777,8 @@ void meta_websocket_on_message(MetaWebSocket *ws, const char *topic,
     g_free(decompressed);
 }
 
-static void meta_websocket_handle_message_event(MetaWebSocket *ws,
-                                                 const guint8 *data, gsize len)
+static void G_GNUC_UNUSED meta_websocket_handle_message_event(MetaWebSocket *ws,
+                                                               const guint8 *data, gsize len)
 {
     JsonParser *parser;
     JsonObject *root;
@@ -857,8 +857,8 @@ static void meta_websocket_handle_message_event(MetaWebSocket *ws,
     g_object_unref(parser);
 }
 
-static void meta_websocket_handle_typing_event(MetaWebSocket *ws,
-                                                const guint8 *data, gsize len)
+static void G_GNUC_UNUSED meta_websocket_handle_typing_event(MetaWebSocket *ws,
+                                                              const guint8 *data, gsize len)
 {
     JsonParser *parser;
     JsonObject *root;
@@ -885,8 +885,8 @@ static void meta_websocket_handle_typing_event(MetaWebSocket *ws,
     g_object_unref(parser);
 }
 
-static void meta_websocket_handle_presence_event(MetaWebSocket *ws,
-                                                  const guint8 *data, gsize len)
+static void G_GNUC_UNUSED meta_websocket_handle_presence_event(MetaWebSocket *ws,
+                                                                const guint8 *data, gsize len)
 {
     JsonParser *parser;
     JsonObject *root;
@@ -1673,5 +1673,78 @@ MetaMqttPacket *meta_mqtt_packet_decode(const guint8 *data, gsize len,
     }
     
     *bytes_consumed = total_len;
+    return packet;
+}
+
+/* ============================================================
+ * MQTT Packet Builders
+ * ============================================================ */
+
+MetaMqttPacket *meta_mqtt_build_connect(MetaWebSocket *ws)
+{
+    MetaMqttPacket *packet;
+    gchar *client_id;
+    
+    packet = meta_mqtt_packet_new(META_MQTT_CONNECT);
+    
+    /* Generate client ID based on user ID and timestamp */
+    if (ws->account && ws->account->user_id) {
+        client_id = g_strdup_printf("mqttwsclient_%s_%lld",
+                                    ws->account->user_id,
+                                    (long long)g_get_real_time());
+    } else {
+        client_id = g_strdup_printf("mqttwsclient_%lld",
+                                    (long long)g_get_real_time());
+    }
+    
+    /* Set client ID as payload */
+    packet->payload = g_byte_array_new();
+    g_byte_array_append(packet->payload, (guint8 *)client_id, strlen(client_id));
+    
+    g_free(client_id);
+    
+    return packet;
+}
+
+MetaMqttPacket *meta_mqtt_build_subscribe(MetaWebSocket *ws, GList *topics)
+{
+    MetaMqttPacket *packet;
+    GList *iter;
+    GByteArray *payload;
+    
+    (void)ws;  /* Unused for now */
+    
+    packet = meta_mqtt_packet_new(META_MQTT_SUBSCRIBE);
+    packet->packet_id = g_random_int_range(1, 65535);
+    packet->qos = 1;  /* QoS 1 for subscribes */
+    
+    /* Build payload with all topics */
+    payload = g_byte_array_new();
+    
+    for (iter = topics; iter; iter = iter->next) {
+        const char *topic = iter->data;
+        if (topic) {
+            guint16 topic_len = strlen(topic);
+            guint8 topic_len_bytes[] = { (topic_len >> 8) & 0xFF, topic_len & 0xFF };
+            guint8 qos = 1;
+            
+            g_byte_array_append(payload, topic_len_bytes, 2);
+            g_byte_array_append(payload, (guint8 *)topic, topic_len);
+            g_byte_array_append(payload, &qos, 1);
+        }
+    }
+    
+    /* For single topic, also set the topic field for encoding */
+    if (topics && topics->data && !topics->next) {
+        packet->topic = g_strdup(topics->data);
+    }
+    
+    /* Store full payload for multi-topic subscribes */
+    if (g_list_length(topics) > 1) {
+        packet->payload = payload;
+    } else {
+        g_byte_array_free(payload, TRUE);
+    }
+    
     return packet;
 }

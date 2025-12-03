@@ -20,11 +20,6 @@ static gboolean config_loaded = FALSE;
  * Internal Helpers
  * ============================================================ */
 
-static gchar *safe_strdup(const gchar *str)
-{
-    return str ? g_strdup(str) : NULL;
-}
-
 static const gchar *json_get_string(JsonObject *obj, const char *member,
                                      const char *default_val)
 {

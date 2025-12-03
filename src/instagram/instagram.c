@@ -12,6 +12,7 @@
  */
 
 #include "instagram.h"
+#include "../common/meta-http.h"
 #include "../common/meta-auth.h"
 #include "../common/meta-config.h"
 #include "../common/meta-security.h"
@@ -19,6 +20,31 @@
 #include <json-glib/json-glib.h>
 #include <string.h>
 #include <time.h>
+
+/* Include compatibility layer */
+#include "../common/purple-compat.h"
+
+/* ============================================================
+ * Forward declarations for async functions and callbacks
+ * ============================================================ */
+
+/* Async functions */
+static void instagram_fetch_user_info_async(MetaAccount *account);
+static void instagram_sync_inbox_async(MetaAccount *account);
+
+/* HTTP callbacks */
+static void instagram_user_info_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_inbox_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_send_message_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_typing_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_mark_seen_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_reaction_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_unsend_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_thread_items_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_leave_thread_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_mute_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_approve_cb(MetaHttpResponse *response, gpointer user_data);
+static void instagram_decline_cb(MetaHttpResponse *response, gpointer user_data);
 
 /* Rate limiting - Instagram is way more aggressive than Messenger about
  * blocking automated access. Keep these conservative or you'll get soft-banned.
@@ -46,7 +72,7 @@ static const gchar *get_instagram_user_agent(void)
 }
 
 /* Helper to get API base URL from config or fallback */
-static const gchar *get_instagram_api_base(void)
+static const gchar * G_GNUC_UNUSED get_instagram_api_base(void)
 {
     const gchar *base = meta_config_get_ig_api_base();
     return (base && base[0] != '\0') ? base : INSTAGRAM_API_BASE;
@@ -62,7 +88,7 @@ static InstagramData *instagram_get_data(MetaAccount *account)
     return (InstagramData *)account->instagram->priv;
 }
 
-static gint64 get_timestamp_ms(void)
+static gint64 G_GNUC_UNUSED get_timestamp_ms(void)
 {
     return g_get_real_time() / 1000;
 }
@@ -470,7 +496,7 @@ gboolean instagram_reconnect(MetaAccount *account)
 static void instagram_fetch_user_info_async(MetaAccount *account)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     GHashTable *headers;
     GHashTableIter iter;
@@ -481,26 +507,24 @@ static void instagram_fetch_user_info_async(MetaAccount *account)
     
     url = g_strdup_printf("%s/accounts/current_user/?edit=true", INSTAGRAM_API_BASE);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
     /* Set headers */
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_user_info_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_user_info_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
 }
 
-static void instagram_user_info_cb(PurpleHttpConnection *connection,
-                                    PurpleHttpResponse *response,
-                                    gpointer user_data)
+static void instagram_user_info_cb(MetaHttpResponse *response, gpointer user_data)
 {
     MetaAccount *account = user_data;
     InstagramData *data;
@@ -509,7 +533,7 @@ static void instagram_user_info_cb(PurpleHttpConnection *connection,
     JsonParser *parser;
     JsonObject *root, *user;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_warning("Failed to fetch Instagram user info");
         return;
     }
@@ -517,7 +541,7 @@ static void instagram_user_info_cb(PurpleHttpConnection *connection,
     data = instagram_get_data(account);
     if (!data) return;
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     parser = json_parser_new();
     if (!json_parser_load_from_data(parser, response_data, response_len, NULL)) {
@@ -561,7 +585,7 @@ static void instagram_user_info_cb(PurpleHttpConnection *connection,
 static void instagram_sync_inbox_async(MetaAccount *account)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     GHashTable *headers;
     GHashTableIter iter;
@@ -579,37 +603,35 @@ static void instagram_sync_inbox_async(MetaAccount *account)
         url = g_strdup(INSTAGRAM_INBOX_API);
     }
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_inbox_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_inbox_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     
     instagram_record_api_call(data);
 }
 
-static void instagram_inbox_cb(PurpleHttpConnection *connection,
-                                PurpleHttpResponse *response,
-                                gpointer user_data)
+static void instagram_inbox_cb(MetaHttpResponse *response, gpointer user_data)
 {
     MetaAccount *account = user_data;
     InstagramData *data;
     const gchar *response_data;
     gsize response_len;
-    GList *threads;
+    GList *threads G_GNUC_UNUSED;
     JsonParser *parser;
     JsonObject *root, *inbox;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_error("Failed to fetch Instagram inbox");
         return;
     }
@@ -617,7 +639,7 @@ static void instagram_inbox_cb(PurpleHttpConnection *connection,
     data = instagram_get_data(account);
     if (!data) return;
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     parser = json_parser_new();
     if (!json_parser_load_from_data(parser, response_data, response_len, NULL)) {
@@ -697,7 +719,7 @@ gboolean instagram_send_message(MetaAccount *account, const char *to,
                                  const char *message, MetaMessageType type)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -782,20 +804,20 @@ gboolean instagram_send_message(MetaAccount *account, const char *to,
     url = g_strdup(INSTAGRAM_SEND_API);
     
     /* Create request */
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_send_message_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_send_message_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     g_free(json_str);
@@ -808,12 +830,12 @@ gboolean instagram_send_message(MetaAccount *account, const char *to,
     return TRUE;
 }
 
-static void instagram_send_message_cb(PurpleHttpConnection *connection,
-                                       PurpleHttpResponse *response,
+static void instagram_send_message_cb(MetaHttpResponse *response,
+                                       
                                        gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
-        int code = purple_http_response_get_code(response);
+    if (!meta_http_response_is_successful(response)) {
+        int code = meta_http_response_get_code(response);
         meta_error("Failed to send Instagram message: %d", code);
         return;
     }
@@ -831,7 +853,7 @@ gboolean instagram_send_typing(MetaAccount *account, const char *thread_id,
                                 gboolean typing)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -850,31 +872,31 @@ gboolean instagram_send_typing(MetaAccount *account, const char *thread_id,
                                 typing ? 1 : 0,
                                 data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_typing_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_typing_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
     return TRUE;
 }
 
-static void instagram_typing_cb(PurpleHttpConnection *connection,
-                                 PurpleHttpResponse *response,
+static void instagram_typing_cb(MetaHttpResponse *response,
+                                 
                                  gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to send Instagram typing indicator");
     }
 }
@@ -889,7 +911,7 @@ gboolean instagram_mark_seen(MetaAccount *account, const char *thread_id,
                               const char *item_id)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -909,20 +931,20 @@ gboolean instagram_mark_seen(MetaAccount *account, const char *thread_id,
     post_data = g_strdup_printf("_uuid=%s&use_unified_inbox=true",
                                 data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_mark_seen_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_mark_seen_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
@@ -931,11 +953,11 @@ gboolean instagram_mark_seen(MetaAccount *account, const char *thread_id,
     return TRUE;
 }
 
-static void instagram_mark_seen_cb(PurpleHttpConnection *connection,
-                                    PurpleHttpResponse *response,
+static void instagram_mark_seen_cb(MetaHttpResponse *response,
+                                    
                                     gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to mark Instagram thread as seen");
     }
 }
@@ -950,7 +972,7 @@ gboolean instagram_send_reaction(MetaAccount *account, const char *thread_id,
                                   const char *item_id, const char *emoji)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -976,20 +998,20 @@ gboolean instagram_send_reaction(MetaAccount *account, const char *thread_id,
         data->uuid ? data->uuid : "");
     g_free(encoded_emoji);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_reaction_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_reaction_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     g_free(client_context);
@@ -999,11 +1021,11 @@ gboolean instagram_send_reaction(MetaAccount *account, const char *thread_id,
     return TRUE;
 }
 
-static void instagram_reaction_cb(PurpleHttpConnection *connection,
-                                   PurpleHttpResponse *response,
+static void instagram_reaction_cb(MetaHttpResponse *response,
+                                   
                                    gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to send Instagram reaction");
     }
 }
@@ -1012,7 +1034,7 @@ gboolean instagram_unsend_message(MetaAccount *account, const char *thread_id,
                                    const char *item_id)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1030,20 +1052,20 @@ gboolean instagram_unsend_message(MetaAccount *account, const char *thread_id,
     
     post_data = g_strdup_printf("_uuid=%s", data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_unsend_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_unsend_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
@@ -1052,11 +1074,11 @@ gboolean instagram_unsend_message(MetaAccount *account, const char *thread_id,
     return TRUE;
 }
 
-static void instagram_unsend_cb(PurpleHttpConnection *connection,
-                                 PurpleHttpResponse *response,
+static void instagram_unsend_cb(MetaHttpResponse *response,
+                                 
                                  gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to unsend Instagram message");
     }
 }
@@ -1099,7 +1121,7 @@ gboolean instagram_send_link(MetaAccount *account, const char *thread_id,
                               const char *url, const char *text)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1128,20 +1150,20 @@ gboolean instagram_send_link(MetaAccount *account, const char *thread_id,
     g_free(encoded_url);
     g_free(encoded_text);
     
-    request = purple_http_request_new(api_url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(api_url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_send_message_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_send_message_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(api_url);
     g_free(post_data);
     g_free(client_context);
@@ -1243,7 +1265,7 @@ GList *instagram_get_thread_items(MetaAccount *account, const char *thread_id,
                                    const char *cursor)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1263,19 +1285,19 @@ GList *instagram_get_thread_items(MetaAccount *account, const char *thread_id,
         url = g_strdup_printf("%s/%s/", INSTAGRAM_THREADS_API, thread_id);
     }
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_thread_items_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_thread_items_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     
     instagram_record_api_call(data);
@@ -1283,20 +1305,20 @@ GList *instagram_get_thread_items(MetaAccount *account, const char *thread_id,
     return NULL;  /* Async */
 }
 
-static void instagram_thread_items_cb(PurpleHttpConnection *connection,
-                                       PurpleHttpResponse *response,
+static void instagram_thread_items_cb(MetaHttpResponse *response,
+                                       
                                        gpointer user_data)
 {
     const gchar *response_data;
     gsize response_len;
     GList *messages;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_error("Failed to fetch Instagram thread items");
         return;
     }
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     messages = instagram_parse_thread_items(response_data);
     
     /* Messages would be delivered to conversation */
@@ -1319,7 +1341,7 @@ gchar *instagram_create_group(MetaAccount *account, GList *user_ids,
 gboolean instagram_leave_thread(MetaAccount *account, const char *thread_id)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1335,20 +1357,20 @@ gboolean instagram_leave_thread(MetaAccount *account, const char *thread_id)
     url = g_strdup_printf("%s/%s/leave/", INSTAGRAM_THREADS_API, thread_id);
     post_data = g_strdup_printf("_uuid=%s", data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_leave_thread_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_leave_thread_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
@@ -1357,11 +1379,11 @@ gboolean instagram_leave_thread(MetaAccount *account, const char *thread_id)
     return TRUE;
 }
 
-static void instagram_leave_thread_cb(PurpleHttpConnection *connection,
-                                       PurpleHttpResponse *response,
+static void instagram_leave_thread_cb(MetaHttpResponse *response,
+                                       
                                        gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to leave Instagram thread");
     }
 }
@@ -1378,7 +1400,7 @@ gboolean instagram_mute_thread(MetaAccount *account, const char *thread_id,
                                 gboolean mute)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1396,31 +1418,31 @@ gboolean instagram_mute_thread(MetaAccount *account, const char *thread_id,
                           mute ? "mute" : "unmute");
     post_data = g_strdup_printf("_uuid=%s", data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_mute_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_mute_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
     return TRUE;
 }
 
-static void instagram_mute_cb(PurpleHttpConnection *connection,
-                               PurpleHttpResponse *response,
+static void instagram_mute_cb(MetaHttpResponse *response,
+                               
                                gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to mute/unmute Instagram thread");
     }
 }
@@ -1428,7 +1450,7 @@ static void instagram_mute_cb(PurpleHttpConnection *connection,
 gboolean instagram_approve_thread(MetaAccount *account, const char *thread_id)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1444,20 +1466,20 @@ gboolean instagram_approve_thread(MetaAccount *account, const char *thread_id)
     url = g_strdup_printf("%s/%s/approve/", INSTAGRAM_THREADS_API, thread_id);
     post_data = g_strdup_printf("_uuid=%s", data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_approve_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_approve_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
@@ -1466,11 +1488,11 @@ gboolean instagram_approve_thread(MetaAccount *account, const char *thread_id)
     return TRUE;
 }
 
-static void instagram_approve_cb(PurpleHttpConnection *connection,
-                                  PurpleHttpResponse *response,
+static void instagram_approve_cb(MetaHttpResponse *response,
+                                  
                                   gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to approve Instagram thread");
     }
 }
@@ -1478,7 +1500,7 @@ static void instagram_approve_cb(PurpleHttpConnection *connection,
 gboolean instagram_decline_thread(MetaAccount *account, const char *thread_id)
 {
     InstagramData *data;
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     GHashTable *headers;
     GHashTableIter iter;
     gpointer key, value;
@@ -1494,20 +1516,20 @@ gboolean instagram_decline_thread(MetaAccount *account, const char *thread_id)
     url = g_strdup_printf("%s/%s/decline/", INSTAGRAM_THREADS_API, thread_id);
     post_data = g_strdup_printf("_uuid=%s", data->uuid ? data->uuid : "");
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "POST");
-    purple_http_request_set_contents(request, post_data, strlen(post_data));
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "POST");
+    meta_http_request_set_body(request, post_data, strlen(post_data));
     
     headers = instagram_get_headers(data);
     g_hash_table_iter_init(&iter, headers);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        purple_http_request_header_set(request, key, value);
+        meta_http_request_set_header(request, key, value);
     }
     g_hash_table_destroy(headers);
     
-    purple_http_request(account->pc, request, instagram_decline_cb, account);
+    meta_http_request_execute(account->pc, request, instagram_decline_cb, account);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
     g_free(post_data);
     
@@ -1516,11 +1538,11 @@ gboolean instagram_decline_thread(MetaAccount *account, const char *thread_id)
     return TRUE;
 }
 
-static void instagram_decline_cb(PurpleHttpConnection *connection,
-                                  PurpleHttpResponse *response,
+static void instagram_decline_cb(MetaHttpResponse *response,
+                                  
                                   gpointer user_data)
 {
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         meta_debug("Failed to decline Instagram thread");
     }
 }
@@ -1676,6 +1698,43 @@ GList *instagram_parse_thread_items(const char *json_str)
     return items;
 }
 
+MetaUser *instagram_parse_user(JsonObject *user_obj)
+{
+    MetaUser *user;
+    
+    if (!user_obj) return NULL;
+    
+    user = g_new0(MetaUser, 1);
+    
+    /* User ID - can be string or int in Instagram API */
+    if (json_object_has_member(user_obj, "pk")) {
+        user->id = g_strdup_printf("%lld",
+            (long long)json_object_get_int_member(user_obj, "pk"));
+    } else if (json_object_has_member(user_obj, "pk_id")) {
+        user->id = g_strdup(json_object_get_string_member(user_obj, "pk_id"));
+    }
+    
+    /* Username */
+    user->username = g_strdup(
+        json_object_get_string_member_with_default(user_obj, "username", ""));
+    
+    /* Display name - use full_name or fall back to username */
+    const char *full_name = json_object_get_string_member_with_default(
+        user_obj, "full_name", NULL);
+    if (full_name && full_name[0] != '\0') {
+        user->display_name = g_strdup(full_name);
+    } else {
+        user->display_name = g_strdup(user->username);
+    }
+    
+    /* Avatar URL */
+    user->avatar_url = g_strdup(
+        json_object_get_string_member_with_default(
+            user_obj, "profile_pic_url", NULL));
+    
+    return user;
+}
+
 MetaThread *instagram_parse_thread(JsonObject *thread_obj)
 {
     MetaThread *thread;
@@ -1765,4 +1824,117 @@ MetaMessage *instagram_parse_item(JsonObject *item_obj)
     } else if (g_strcmp0(item_type, "media") == 0 ||
                g_strcmp0(item_type, "raven_media") == 0) {
         msg->type = META_MSG_IMAGE;
-        if (json_object_has_
+        if (json_object_has_member(item_obj, "media")) {
+            JsonObject *media = json_object_get_object_member(item_obj, "media");
+            if (json_object_has_member(media, "image_versions2")) {
+                JsonObject *versions = json_object_get_object_member(media, "image_versions2");
+                if (json_object_has_member(versions, "candidates")) {
+                    JsonArray *candidates = json_object_get_array_member(versions, "candidates");
+                    if (json_array_get_length(candidates) > 0) {
+                        JsonObject *best = json_array_get_object_element(candidates, 0);
+                        msg->media_url = g_strdup(
+                            json_object_get_string_member(best, "url"));
+                    }
+                }
+            }
+        }
+    } else if (g_strcmp0(item_type, "link") == 0) {
+        msg->type = META_MSG_TEXT;  /* Treat links as text with URL */
+        if (json_object_has_member(item_obj, "link")) {
+            JsonObject *link = json_object_get_object_member(item_obj, "link");
+            const char *link_text = json_object_get_string_member_with_default(link, "text", "");
+            const char *link_url = json_object_get_string_member_with_default(link, "link_url", "");
+            msg->text = g_strdup_printf("%s %s", link_text, link_url);
+        }
+    } else if (g_strcmp0(item_type, "like") == 0) {
+        msg->type = META_MSG_REACTION;  /* Like is a reaction */
+        msg->text = g_strdup("❤️");
+    } else if (g_strcmp0(item_type, "voice_media") == 0) {
+        msg->type = META_MSG_AUDIO;
+        if (json_object_has_member(item_obj, "voice_media")) {
+            JsonObject *voice = json_object_get_object_member(item_obj, "voice_media");
+            if (json_object_has_member(voice, "media")) {
+                JsonObject *media = json_object_get_object_member(voice, "media");
+                if (json_object_has_member(media, "audio")) {
+                    JsonObject *audio = json_object_get_object_member(media, "audio");
+                    msg->media_url = g_strdup(
+                        json_object_get_string_member(audio, "audio_src"));
+                }
+            }
+        }
+    } else if (g_strcmp0(item_type, "animated_media") == 0) {
+        msg->type = META_MSG_STICKER;
+        if (json_object_has_member(item_obj, "animated_media")) {
+            JsonObject *anim = json_object_get_object_member(item_obj, "animated_media");
+            if (json_object_has_member(anim, "images")) {
+                JsonObject *images = json_object_get_object_member(anim, "images");
+                if (json_object_has_member(images, "fixed_height")) {
+                    JsonObject *fixed = json_object_get_object_member(images, "fixed_height");
+                    msg->media_url = g_strdup(
+                        json_object_get_string_member(fixed, "url"));
+                }
+            }
+        }
+    } else {
+        /* Unknown type - treat as text with type indicator */
+        msg->type = META_MSG_TEXT;
+        msg->text = g_strdup_printf("[%s]", item_type);
+    }
+    
+    /* Check for reactions - store first reaction emoji if present */
+    if (json_object_has_member(item_obj, "reactions")) {
+        JsonObject *reactions = json_object_get_object_member(item_obj, "reactions");
+        if (json_object_has_member(reactions, "emojis")) {
+            JsonArray *emojis = json_object_get_array_member(reactions, "emojis");
+            if (json_array_get_length(emojis) > 0) {
+                JsonObject *emoji = json_array_get_object_element(emojis, 0);
+                const char *e = json_object_get_string_member(emoji, "emoji");
+                if (e) {
+                    msg->reaction_emoji = g_strdup(e);
+                }
+            }
+        }
+    }
+    
+    return msg;
+}
+
+/* ============================================================
+ * Cleanup
+ * ============================================================ */
+
+void instagram_free_user(MetaUser *user)
+{
+    if (!user) return;
+    
+    g_free(user->id);
+    g_free(user->username);
+    g_free(user->display_name);
+    g_free(user->avatar_url);
+    g_free(user);
+}
+
+void instagram_free_thread(MetaThread *thread)
+{
+    if (!thread) return;
+    
+    g_free(thread->id);
+    g_free(thread->name);
+    g_free(thread->last_message_preview);
+    
+    g_list_free_full(thread->participants, (GDestroyNotify)instagram_free_user);
+    
+    g_free(thread);
+}
+
+void instagram_free_message(MetaMessage *msg)
+{
+    if (!msg) return;
+    
+    g_free(msg->id);
+    g_free(msg->sender_id);
+    g_free(msg->text);
+    g_free(msg->media_url);
+    g_free(msg->reaction_emoji);
+    g_free(msg);
+}

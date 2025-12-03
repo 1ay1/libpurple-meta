@@ -9,11 +9,47 @@
  */
 
 #include "meta-auth.h"
+#include "meta-http.h"
 #include "meta-config.h"
 #include "meta-security.h"
+#include "meta-websocket.h"
+#include "purple-compat.h"
 #include <json-glib/json-glib.h>
+#include <gio/gio.h>
 #include <string.h>
 #include <time.h>
+
+/* ============================================================
+ * Forward declarations for callback data structures
+ * ============================================================ */
+
+typedef struct {
+    MetaAccount *account;
+    MetaTokenCallback callback;
+    gpointer user_data;
+} MetaTokenExchangeData;
+
+typedef struct {
+    MetaAccount *account;
+    MetaAuthCallback callback;
+    gpointer user_data;
+} MetaValidateData;
+
+/* Forward declarations for callbacks */
+static void meta_auth_token_response_cb(MetaHttpResponse *response, gpointer user_data);
+static void meta_auth_validate_response_cb(MetaHttpResponse *response, gpointer user_data);
+
+/* Forward declarations for auth flow helpers */
+static gboolean meta_auth_timeout_cb(MetaAuthState *state);
+static void meta_auth_start_callback_server(MetaAuthState *state);
+static gboolean meta_auth_handle_http_connection(GSocketService *service,
+                                                  GSocketConnection *connection,
+                                                  GObject *source_object,
+                                                  MetaAuthState *state);
+static void meta_auth_exchange_complete_cb(MetaAccount *account,
+                                            MetaOAuthToken *token,
+                                            const char *error_message,
+                                            gpointer user_data);
 
 /* ============================================================
  * Internal State Management
@@ -51,10 +87,123 @@ gchar *meta_auth_generate_state(void)
     return g_string_free(state, FALSE);
 }
 
+/* Copy text to clipboard */
+static void copy_to_clipboard(const char *text)
+{
+    GError *error = NULL;
+    gint exit_status = 0;
+    
+    meta_debug("copy_to_clipboard called with text length: %zu", strlen(text));
+    
+#ifdef __APPLE__
+    /* macOS: use pbcopy via g_spawn_sync with stdin */
+    {
+        gchar *argv[] = { "/usr/bin/pbcopy", NULL };
+        gchar *std_err = NULL;
+        
+        meta_debug("Calling pbcopy synchronously...");
+        gboolean success = g_spawn_sync(
+            NULL,           /* working_directory */
+            argv,           /* argv */
+            NULL,           /* envp */
+            G_SPAWN_DEFAULT,/* flags */
+            NULL,           /* child_setup */
+            NULL,           /* user_data */
+            NULL,           /* standard_output */
+            &std_err,       /* standard_error */
+            &exit_status,   /* exit_status */
+            &error          /* error */
+        );
+        
+        if (!success) {
+            meta_warning("pbcopy spawn failed: %s", error ? error->message : "unknown");
+            if (error) g_error_free(error);
+            error = NULL;
+            
+            /* Fallback: write to file and use shell */
+            meta_debug("Trying fallback method with temp file...");
+            if (g_file_set_contents("/tmp/pidgin_meta_url.txt", text, -1, &error)) {
+                gchar *cmd = g_strdup_printf("/usr/bin/pbcopy < /tmp/pidgin_meta_url.txt");
+                int ret = system(cmd);
+                meta_debug("system() returned: %d", ret);
+                g_free(cmd);
+            } else {
+                meta_warning("Failed to write temp file: %s", error ? error->message : "unknown");
+            }
+        } else {
+            /* pbcopy spawned but we need to write to its stdin - this won't work with g_spawn_sync
+             * Let's use the file method instead */
+            meta_debug("pbcopy spawned, exit=%d, but stdin method won't work, using file method", exit_status);
+            g_free(std_err);
+            
+            /* Use file + shell method which actually works */
+            if (g_file_set_contents("/tmp/pidgin_meta_url.txt", text, -1, &error)) {
+                int ret = system("/usr/bin/pbcopy < /tmp/pidgin_meta_url.txt");
+                meta_debug("system(pbcopy) returned: %d", ret);
+                if (ret == 0) {
+                    meta_debug("Clipboard copy succeeded!");
+                }
+            }
+        }
+    }
+#elif defined(_WIN32)
+    /* Windows clipboard handling would go here */
+    (void)text;
+    (void)exit_status;
+#else
+    /* Linux: use xclip */
+    {
+        if (g_file_set_contents("/tmp/pidgin_meta_url.txt", text, -1, &error)) {
+            int ret = system("xclip -selection clipboard < /tmp/pidgin_meta_url.txt");
+            meta_debug("system(xclip) returned: %d", ret);
+        }
+    }
+#endif
+
+    if (error) {
+        meta_warning("Clipboard error: %s", error->message);
+        g_error_free(error);
+    }
+}
+
+/* Callback for auth dialog buttons */
+static void meta_auth_dialog_cb(gpointer user_data, int action)
+{
+    gchar *url = user_data;
+    
+    meta_debug("Auth dialog callback called! action=%d, url=%s", action, url ? "present" : "NULL");
+    
+    if (!url) {
+        meta_warning("Auth dialog callback: URL is NULL!");
+        return;
+    }
+    
+    if (action == 0) {
+        /* "Open Browser" button clicked */
+        meta_debug("Opening browser...");
+        gboolean result = meta_auth_open_browser(url);
+        meta_debug("Browser open result: %d", result);
+        /* Don't free URL yet - user might need to copy it too */
+        return;
+    } else if (action == 1) {
+        /* "Copy Link" button clicked */
+        meta_debug("Copying to clipboard...");
+        copy_to_clipboard(url);
+        purple_notify_info(NULL, "Link Copied", 
+                          "The authentication link has been copied to your clipboard.",
+                          "Paste it in your browser to continue.");
+        /* Don't free URL yet - user might need to open browser too */
+        return;
+    }
+    /* Action 2 is "Cancel" - close and free */
+    meta_debug("Cancel clicked, freeing URL");
+    
+    g_free(url);
+}
+
 void meta_auth_generate_pkce(gchar **verifier, gchar **challenge)
 {
     guint8 random_bytes[32];
-    GString *verifier_str = g_string_new(NULL);
     GChecksum *checksum;
     guint8 digest[32];
     gsize digest_len = 32;
@@ -148,28 +297,60 @@ gchar *meta_auth_build_auth_url(MetaAccount *account,
 gboolean meta_auth_open_browser(const char *auth_url)
 {
     GError *error = NULL;
-    gboolean success;
+    gboolean success = FALSE;
     
-#ifdef _WIN32
-    /* Windows: use ShellExecute equivalent via glib */
-    gchar *command = g_strdup_printf("start \"\" \"%s\"", auth_url);
-    success = g_spawn_command_line_async(command, &error);
-    g_free(command);
-#elif defined(__APPLE__)
-    /* macOS */
-    gchar *command = g_strdup_printf("open \"%s\"", auth_url);
-    success = g_spawn_command_line_async(command, &error);
-    g_free(command);
+    meta_debug("meta_auth_open_browser called with URL length: %zu", strlen(auth_url));
+    
+    /* Try GIO's cross-platform URI launcher first */
+    meta_debug("Trying g_app_info_launch_default_for_uri...");
+    success = g_app_info_launch_default_for_uri(auth_url, NULL, &error);
+    
+    if (success) {
+        meta_debug("g_app_info_launch_default_for_uri succeeded!");
+        return TRUE;
+    }
+    
+    if (error) {
+        meta_warning("g_app_info_launch_default_for_uri failed: %s", error->message);
+        g_error_free(error);
+        error = NULL;
+    }
+    
+    /* Fallback to platform-specific methods */
+    meta_debug("Falling back to platform-specific method...");
+    
+#ifdef __APPLE__
+    /* macOS: use system() with open command as last resort */
+    {
+        gchar *cmd = g_strdup_printf("/usr/bin/open \"%s\"", auth_url);
+        meta_debug("Running: %s", cmd);
+        int ret = system(cmd);
+        g_free(cmd);
+        success = (ret == 0);
+        meta_debug("system() returned: %d, success=%d", ret, success);
+    }
+#elif defined(_WIN32)
+    /* Windows: use start command */
+    {
+        gchar *cmd = g_strdup_printf("start \"\" \"%s\"", auth_url);
+        int ret = system(cmd);
+        g_free(cmd);
+        success = (ret == 0);
+    }
 #else
     /* Linux/Unix - try xdg-open */
-    gchar *command = g_strdup_printf("xdg-open \"%s\"", auth_url);
-    success = g_spawn_command_line_async(command, &error);
-    g_free(command);
+    {
+        gchar *cmd = g_strdup_printf("xdg-open \"%s\"", auth_url);
+        int ret = system(cmd);
+        g_free(cmd);
+        success = (ret == 0);
+    }
 #endif
     
-    if (!success && error) {
-        meta_warning("Failed to open browser: %s", error->message);
-        g_error_free(error);
+    if (!success) {
+        meta_warning("Failed to open browser with all methods");
+    } else {
+        meta_debug("Browser open succeeded via fallback method");
     }
     
     return success;
@@ -215,16 +396,34 @@ void meta_auth_start_oauth_async(MetaAccount *account,
     purple_connection_update_progress(account->pc, "Opening browser for login...",
                                        1, 3);
     
-    /* Try to open browser */
+    /* Try to open browser automatically */
     if (!meta_auth_open_browser(auth_url)) {
-        /* Browser failed, show URL to user */
-        purple_notify_uri(account->pc, auth_url);
+        /* Browser failed to open automatically, show dialog with button */
+        gchar *short_msg = g_strdup_printf(
+            "Please click 'Open Browser' to login to your Meta account.\n\n"
+            "If the button doesn't work, copy this URL:\n"
+            "%.60s%s",
+            auth_url,
+            strlen(auth_url) > 60 ? "..." : "");
         
-        /* Also show a message with the URL */
-        purple_notify_message(account->pc, PURPLE_NOTIFY_MSG_INFO,
+        /* Store URL for the callback (will be freed by close callback) */
+        gchar *url_copy = g_strdup(auth_url);
+        
+        purple_request_action(account->pc,
                               "Meta Authentication",
-                              "Please open this URL in your browser to login:",
-                              auth_url, NULL, NULL);
+                              "Login Required",
+                              short_msg,
+                              0,  /* default action */
+                              account->pa,
+                              NULL,  /* who */
+                              NULL,  /* conv */
+                              url_copy,  /* user_data */
+                              3,  /* number of actions */
+                              "Open Browser", meta_auth_dialog_cb,
+                              "Copy Link", meta_auth_dialog_cb,
+                              "Cancel", meta_auth_dialog_cb);
+        
+        g_free(short_msg);
     }
     
     /* Set up a timeout for the auth flow (5 minutes) */
@@ -487,7 +686,7 @@ void meta_auth_exchange_code(MetaAccount *account,
                               gpointer user_data)
 {
     GString *post_data = g_string_new(NULL);
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     
     /* Build POST data */
     g_string_append_printf(post_data, "client_id=%s", META_OAUTH_CLIENT_ID);
@@ -523,21 +722,13 @@ void meta_auth_exchange_code(MetaAccount *account,
     data->user_data = user_data;
     
     /* Make the request */
-    purple_http_request(account->pc, request, meta_auth_token_response_cb, data);
+    meta_http_request_execute(account->pc, request, meta_auth_token_response_cb, data);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_string_free(post_data, TRUE);
 }
 
-typedef struct {
-    MetaAccount *account;
-    MetaTokenCallback callback;
-    gpointer user_data;
-} MetaTokenExchangeData;
-
-static void meta_auth_token_response_cb(PurpleHttpConnection *connection,
-                                         PurpleHttpResponse *response,
-                                         gpointer user_data)
+static void meta_auth_token_response_cb(MetaHttpResponse *response, gpointer user_data)
 {
     MetaTokenExchangeData *data = user_data;
     JsonParser *parser = NULL;
@@ -547,8 +738,8 @@ static void meta_auth_token_response_cb(PurpleHttpConnection *connection,
     gsize response_len;
     GError *error = NULL;
     
-    if (!purple_http_response_is_successful(response)) {
-        int code = purple_http_response_get_code(response);
+    if (!meta_http_response_is_successful(response)) {
+        int code = meta_http_response_get_code(response);
         gchar *error_msg = g_strdup_printf("HTTP error %d", code);
         
         if (data->callback) {
@@ -560,7 +751,7 @@ static void meta_auth_token_response_cb(PurpleHttpConnection *connection,
         return;
     }
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     /* Parse JSON response */
     parser = json_parser_new();
@@ -667,7 +858,7 @@ void meta_auth_validate_token_async(MetaAccount *account,
                                      MetaAuthCallback callback,
                                      gpointer user_data)
 {
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     
     if (!account->access_token) {
@@ -683,29 +874,21 @@ void meta_auth_validate_token_async(MetaAccount *account,
                           account->access_token,
                           account->access_token);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
     MetaValidateData *data = g_new0(MetaValidateData, 1);
     data->account = account;
     data->callback = callback;
     data->user_data = user_data;
     
-    purple_http_request(account->pc, request, meta_auth_validate_response_cb, data);
+    meta_http_request_execute(account->pc, request, meta_auth_validate_response_cb, data);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
 }
 
-typedef struct {
-    MetaAccount *account;
-    MetaAuthCallback callback;
-    gpointer user_data;
-} MetaValidateData;
-
-static void meta_auth_validate_response_cb(PurpleHttpConnection *connection,
-                                            PurpleHttpResponse *response,
-                                            gpointer user_data)
+static void meta_auth_validate_response_cb(MetaHttpResponse *response, gpointer user_data)
 {
     MetaValidateData *data = user_data;
     JsonParser *parser;
@@ -715,7 +898,7 @@ static void meta_auth_validate_response_cb(PurpleHttpConnection *connection,
     gboolean is_valid = FALSE;
     GError *error = NULL;
     
-    if (!purple_http_response_is_successful(response)) {
+    if (!meta_http_response_is_successful(response)) {
         if (data->callback) {
             data->callback(data->account, FALSE, "Token validation request failed",
                           data->user_data);
@@ -724,7 +907,7 @@ static void meta_auth_validate_response_cb(PurpleHttpConnection *connection,
         return;
     }
     
-    response_data = purple_http_response_get_data(response, &response_len);
+    response_data = meta_http_response_get_data(response, &response_len);
     
     parser = json_parser_new();
     if (!json_parser_load_from_data(parser, response_data, response_len, &error)) {
@@ -773,7 +956,7 @@ void meta_auth_refresh_token(MetaAccount *account,
 {
     /* Facebook long-lived tokens don't have a refresh token
      * We need to exchange for a new long-lived token before expiry */
-    PurpleHttpRequest *request;
+    MetaHttpRequest *request;
     gchar *url;
     
     url = g_strdup_printf("%s/oauth/access_token"
@@ -784,17 +967,17 @@ void meta_auth_refresh_token(MetaAccount *account,
                           META_OAUTH_CLIENT_ID,
                           account->access_token);
     
-    request = purple_http_request_new(url);
-    purple_http_request_set_method(request, "GET");
+    request = meta_http_request_new(url);
+    meta_http_request_set_method(request, "GET");
     
     MetaTokenExchangeData *data = g_new0(MetaTokenExchangeData, 1);
     data->account = account;
     data->callback = callback;
     data->user_data = user_data;
     
-    purple_http_request(account->pc, request, meta_auth_token_response_cb, data);
+    meta_http_request_execute(account->pc, request, meta_auth_token_response_cb, data);
     
-    purple_http_request_unref(request);
+    meta_http_request_free(request);
     g_free(url);
 }
 

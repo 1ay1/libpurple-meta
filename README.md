@@ -6,6 +6,7 @@ This plugin enables Pidgin (and other libpurple-based clients) to connect to Met
 
 ## 📚 Documentation
 
+- **[Meta App Setup Guide](docs/META_APP_SETUP.md)** - ⭐ **Start here!** Create your Meta Developer App
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get up and running in 5 minutes
 - **[Configuration Guide](docs/CONFIGURATION.md)** - Complete configuration reference
 - **[Security Guide](docs/SECURITY.md)** - Security best practices and risk assessment
@@ -139,24 +140,20 @@ For complete configuration options, see the **[Configuration Guide](docs/CONFIGU
 
 ### Quick Start
 
-1. Copy the sample config to your Purple directory:
+1. **Set up a Meta Developer App** - Follow the **[Meta App Setup Guide](docs/META_APP_SETUP.md)** to create your app and get your App ID
+
+2. Copy the sample config to your Purple directory:
    ```bash
    cp config/meta-config.json ~/.purple/meta-config.json
    ```
 
-2. Edit the configuration for your needs (Instagram or Messenger)
+3. Edit `~/.purple/meta-config.json` and replace `YOUR_META_APP_ID_HERE` with your actual App ID
 
-3. Add an account in Pidgin with the "Meta (Messenger + Instagram)" protocol
+4. Add an account in Pidgin with the "Meta (Messenger + Instagram)" protocol
 
-### Setting Up a Meta Developer App (Messenger)
+5. When prompted, authenticate in your browser
 
-For Messenger OAuth authentication:
-
-1. Go to [Meta for Developers](https://developers.facebook.com/)
-2. Create a new app (Business type)
-3. Add the "Messenger" product
-4. Configure OAuth redirect URIs: `https://localhost/oauth/callback`
-5. Copy your App ID to your `meta-config.json`
+> **Important:** You must create a Meta Developer App and add yourself as a test user before the plugin will work. See the [Meta App Setup Guide](docs/META_APP_SETUP.md) for detailed instructions.
 
 ### Adding an Account in Pidgin
 

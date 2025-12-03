@@ -19,6 +19,7 @@
 #include "common/meta-websocket.h"
 #include "messenger/messenger.h"
 #include "instagram/instagram.h"
+#include "common/purple-compat.h"
 
 #include <purple.h>
 #include <glib.h>
@@ -110,15 +111,25 @@ MetaAccount *meta_account_get(PurpleAccount *pa)
  * Protocol Actions (Menu items)
  * ============================================================ */
 
+#if PURPLE_VERSION == 2
+static void action_refresh_threads(PurplePluginAction *action)
+{
+    PurpleConnection *gc = action->context;
+#else
 static void action_refresh_threads(PurpleProtocolAction *action)
 {
     PurpleConnection *gc = action->connection;
+#endif
     MetaAccount *account = META_GC_ACCOUNT(gc);
     
     if (!account || account->state != META_STATE_CONNECTED) {
+#if PURPLE_VERSION == 2
         purple_notify_error(gc, "Meta", "Not connected", 
-                           "You must be connected to refresh threads.",
-                           NULL);
+                           "You must be connected to refresh threads.");
+#else
+        purple_notify_error(gc, "Meta", "Not connected", 
+                           "You must be connected to refresh threads.", NULL);
+#endif
         return;
     }
     
@@ -129,9 +140,15 @@ static void action_refresh_threads(PurpleProtocolAction *action)
     }
 }
 
+#if PURPLE_VERSION == 2
+static void action_switch_to_messenger(PurplePluginAction *action)
+{
+    PurpleConnection *gc = action->context;
+#else
 static void action_switch_to_messenger(PurpleProtocolAction *action)
 {
     PurpleConnection *gc = action->connection;
+#endif
     MetaAccount *account = META_GC_ACCOUNT(gc);
     
     if (!account) return;
@@ -140,14 +157,24 @@ static void action_switch_to_messenger(PurpleProtocolAction *action)
     account->active = account->messenger;
     purple_account_set_int(account->pa, "service_mode", META_SERVICE_MESSENGER);
     
+#if PURPLE_VERSION == 2
     purple_notify_info(gc, "Meta", "Switched to Messenger",
-                      "Active service is now Facebook Messenger.",
-                      NULL);
+                      "Active service is now Facebook Messenger.");
+#else
+    purple_notify_info(gc, "Meta", "Switched to Messenger",
+                      "Active service is now Facebook Messenger.", NULL);
+#endif
 }
 
+#if PURPLE_VERSION == 2
+static void action_switch_to_instagram(PurplePluginAction *action)
+{
+    PurpleConnection *gc = action->context;
+#else
 static void action_switch_to_instagram(PurpleProtocolAction *action)
 {
     PurpleConnection *gc = action->connection;
+#endif
     MetaAccount *account = META_GC_ACCOUNT(gc);
     
     if (!account) return;
@@ -156,14 +183,24 @@ static void action_switch_to_instagram(PurpleProtocolAction *action)
     account->active = account->instagram;
     purple_account_set_int(account->pa, "service_mode", META_SERVICE_INSTAGRAM);
     
+#if PURPLE_VERSION == 2
     purple_notify_info(gc, "Meta", "Switched to Instagram",
-                      "Active service is now Instagram DMs.",
-                      NULL);
+                      "Active service is now Instagram DMs.");
+#else
+    purple_notify_info(gc, "Meta", "Switched to Instagram",
+                      "Active service is now Instagram DMs.", NULL);
+#endif
 }
 
+#if PURPLE_VERSION == 2
+static void action_reauthenticate(PurplePluginAction *action)
+{
+    PurpleConnection *gc = action->context;
+#else
 static void action_reauthenticate(PurpleProtocolAction *action)
 {
     PurpleConnection *gc = action->connection;
+#endif
     MetaAccount *account = META_GC_ACCOUNT(gc);
     
     if (!account) return;
@@ -177,11 +214,40 @@ static void action_reauthenticate(PurpleProtocolAction *action)
     purple_account_set_string(account->pa, "access_token", NULL);
     purple_account_set_string(account->pa, "session_cookies", NULL);
     
+#if PURPLE_VERSION == 2
     purple_notify_info(gc, "Meta", "Credentials cleared",
-                      "Please disconnect and reconnect to re-authenticate.",
-                      NULL);
+                      "Please disconnect and reconnect to re-authenticate.");
+#else
+    purple_notify_info(gc, "Meta", "Credentials cleared",
+                      "Please disconnect and reconnect to re-authenticate.", NULL);
+#endif
 }
 
+#if PURPLE_VERSION == 2
+static GList *meta_actions(PurplePlugin *plugin, gpointer context)
+{
+    GList *actions = NULL;
+    PurplePluginAction *action;
+    
+    action = purple_plugin_action_new("Refresh Conversations", 
+                                       action_refresh_threads);
+    actions = g_list_append(actions, action);
+    
+    action = purple_plugin_action_new("Switch to Messenger", 
+                                       action_switch_to_messenger);
+    actions = g_list_append(actions, action);
+    
+    action = purple_plugin_action_new("Switch to Instagram", 
+                                       action_switch_to_instagram);
+    actions = g_list_append(actions, action);
+    
+    action = purple_plugin_action_new("Re-authenticate...", 
+                                       action_reauthenticate);
+    actions = g_list_append(actions, action);
+    
+    return actions;
+}
+#else
 static GList *meta_protocol_get_actions(PurpleConnection *gc)
 {
     GList *actions = NULL;
@@ -205,65 +271,7 @@ static GList *meta_protocol_get_actions(PurpleConnection *gc)
     
     return actions;
 }
-
-/* ============================================================
- * Account Options (Settings UI)
- * ============================================================ */
-
-static GList *meta_protocol_get_account_options(void)
-{
-    GList *options = NULL;
-    PurpleAccountOption *opt;
-    
-    /* Service mode dropdown */
-    GList *mode_list = NULL;
-    PurpleKeyValuePair *kvp;
-    
-    kvp = g_new0(PurpleKeyValuePair, 1);
-    kvp->key = g_strdup("Facebook Messenger");
-    kvp->value = g_strdup("messenger");
-    mode_list = g_list_append(mode_list, kvp);
-    
-    kvp = g_new0(PurpleKeyValuePair, 1);
-    kvp->key = g_strdup("Instagram DMs");
-    kvp->value = g_strdup("instagram");
-    mode_list = g_list_append(mode_list, kvp);
-    
-    kvp = g_new0(PurpleKeyValuePair, 1);
-    kvp->key = g_strdup("Both (Unified)");
-    kvp->value = g_strdup("unified");
-    mode_list = g_list_append(mode_list, kvp);
-    
-    opt = purple_account_option_list_new("Service", "service_mode", mode_list);
-    options = g_list_append(options, opt);
-    
-    /* Show presence toggle */
-    opt = purple_account_option_bool_new("Show online status to others",
-                                          "show_presence", TRUE);
-    options = g_list_append(options, opt);
-    
-    /* Sync history toggle */
-    opt = purple_account_option_bool_new("Sync message history on connect",
-                                          "sync_history", TRUE);
-    options = g_list_append(options, opt);
-    
-    /* History limit */
-    opt = purple_account_option_int_new("Messages to sync per thread",
-                                         "sync_limit", 50);
-    options = g_list_append(options, opt);
-    
-    /* Mark as read automatically */
-    opt = purple_account_option_bool_new("Mark messages as read automatically",
-                                          "auto_read", TRUE);
-    options = g_list_append(options, opt);
-    
-    /* Debug mode */
-    opt = purple_account_option_bool_new("Enable debug logging",
-                                          "debug_mode", FALSE);
-    options = g_list_append(options, opt);
-    
-    return options;
-}
+#endif
 
 /* ============================================================
  * Connection Handling
@@ -274,12 +282,11 @@ void meta_login(PurpleAccount *account)
     PurpleConnection *gc = purple_account_get_connection(account);
     MetaAccount *ma;
     const char *service_mode_str;
-    MetaConfig *config;
     
     meta_debug("Attempting to log in to Meta services...");
     
-    /* Get configuration */
-    config = meta_config_get();
+    /* Ensure configuration is loaded */
+    (void)meta_config_get();
     
     /* Create account state */
     ma = meta_account_new(account);
@@ -287,7 +294,12 @@ void meta_login(PurpleAccount *account)
     ma->state = META_STATE_CONNECTING;
     
     purple_connection_set_protocol_data(gc, ma);
+#if PURPLE_VERSION == 2
+    purple_connection_set_state(gc, PURPLE_CONNECTING);
+    purple_connection_update_progress(gc, "Connecting...", 1, 4);
+#else
     purple_connection_set_state(gc, PURPLE_CONNECTION_STATE_CONNECTING);
+#endif
     
     /* Warn user about plaintext storage (once per account) */
     meta_security_warn_plaintext_storage(ma);
@@ -297,8 +309,13 @@ void meta_login(PurpleAccount *account)
     if (g_strcmp0(service_mode_str, "instagram") == 0) {
         /* Check if Instagram is enabled in config */
         if (!meta_config_is_instagram_enabled()) {
+#if PURPLE_VERSION == 2
+            purple_connection_error_reason(gc, PURPLE_CONNECTION_ERROR_OTHER_ERROR,
+                                    "Instagram is disabled in configuration");
+#else
             purple_connection_error(gc, PURPLE_CONNECTION_ERROR_OTHER_ERROR,
                                     "Instagram is disabled in configuration");
+#endif
             return;
         }
         ma->mode = META_SERVICE_INSTAGRAM;
@@ -309,8 +326,13 @@ void meta_login(PurpleAccount *account)
     } else {
         /* Check if Messenger is enabled in config */
         if (!meta_config_is_messenger_enabled()) {
+#if PURPLE_VERSION == 2
+            purple_connection_error_reason(gc, PURPLE_CONNECTION_ERROR_OTHER_ERROR,
+                                    "Messenger is disabled in configuration");
+#else
             purple_connection_error(gc, PURPLE_CONNECTION_ERROR_OTHER_ERROR,
                                     "Messenger is disabled in configuration");
+#endif
             return;
         }
         ma->mode = META_SERVICE_MESSENGER;
@@ -335,6 +357,10 @@ void meta_login(PurpleAccount *account)
         /* We have a token, try to connect directly */
         meta_debug("Found stored access token, attempting direct connection...");
         ma->state = META_STATE_AUTHENTICATING;
+        
+#if PURPLE_VERSION == 2
+        purple_connection_update_progress(gc, "Authenticating...", 2, 4);
+#endif
         
         /* Validate token and connect */
         if (meta_auth_validate_token(ma)) {
@@ -445,7 +471,12 @@ unsigned int meta_send_typing(PurpleConnection *gc, const char *name,
  * ============================================================ */
 
 void meta_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy,
-                    PurpleGroup *group, const char *message)
+                    PurpleGroup *group
+#if PURPLE_VERSION == 2
+                    )
+#else
+                    , const char *message)
+#endif
 {
     /* Meta doesn't really have a buddy add concept - we sync contacts */
     meta_debug("Add buddy requested for %s (no-op)", 
@@ -472,7 +503,7 @@ void meta_set_status(PurpleAccount *account, PurpleStatus *status)
         return;
     }
     
-    prim = purple_status_type_get_primitive(purple_status_get_status_type(status));
+    prim = purple_status_type_get_primitive(purple_status_get_type(status));
     
     meta_debug("Setting status to %s", 
                purple_primitive_get_name_from_type(prim));
@@ -490,14 +521,14 @@ static GList *meta_status_types(PurpleAccount *account)
     /* Available */
     type = purple_status_type_new_with_attrs(
         PURPLE_STATUS_AVAILABLE, NULL, NULL, TRUE, TRUE, FALSE,
-        "message", "Message", purple_value_new(G_TYPE_STRING),
+        "message", "Message", purple_value_new(PURPLE_TYPE_STRING),
         NULL);
     types = g_list_append(types, type);
     
     /* Away */
     type = purple_status_type_new_with_attrs(
         PURPLE_STATUS_AWAY, NULL, NULL, TRUE, TRUE, FALSE,
-        "message", "Message", purple_value_new(G_TYPE_STRING),
+        "message", "Message", purple_value_new(PURPLE_TYPE_STRING),
         NULL);
     types = g_list_append(types, type);
     
@@ -521,9 +552,9 @@ static GList *meta_status_types(PurpleAccount *account)
 GList *meta_chat_info(PurpleConnection *gc)
 {
     GList *info = NULL;
-    PurpleProtocolChatEntry *pce;
+    struct proto_chat_entry *pce;
     
-    pce = g_new0(PurpleProtocolChatEntry, 1);
+    pce = g_new0(struct proto_chat_entry, 1);
     pce->label = "Thread ID";
     pce->identifier = "thread_id";
     pce->required = TRUE;
@@ -550,8 +581,13 @@ void meta_join_chat(PurpleConnection *gc, GHashTable *components)
     const char *thread_id = g_hash_table_lookup(components, "thread_id");
     
     if (!thread_id) {
+#if PURPLE_VERSION == 2
+        purple_notify_error(gc, "Meta", "Cannot join chat",
+                           "No thread ID specified.");
+#else
         purple_notify_error(gc, "Meta", "Cannot join chat",
                            "No thread ID specified.", NULL);
+#endif
         return;
     }
     
@@ -648,7 +684,195 @@ int meta_chat_send(PurpleConnection *gc, int id, PurpleMessage *msg)
 }
 
 /* ============================================================
- * Protocol Interface Definition (libpurple 3.0 style)
+ * Account Options
+ * ============================================================ */
+
+static GList *meta_protocol_get_account_options(void)
+{
+    GList *options = NULL;
+    PurpleAccountOption *opt;
+    
+    /* Service mode dropdown */
+    GList *mode_list = NULL;
+    PurpleKeyValuePair *kvp;
+    
+    kvp = g_new0(PurpleKeyValuePair, 1);
+    kvp->key = g_strdup("Facebook Messenger");
+    kvp->value = g_strdup("messenger");
+    mode_list = g_list_append(mode_list, kvp);
+    
+    kvp = g_new0(PurpleKeyValuePair, 1);
+    kvp->key = g_strdup("Instagram DMs");
+    kvp->value = g_strdup("instagram");
+    mode_list = g_list_append(mode_list, kvp);
+    
+    kvp = g_new0(PurpleKeyValuePair, 1);
+    kvp->key = g_strdup("Both (Unified)");
+    kvp->value = g_strdup("unified");
+    mode_list = g_list_append(mode_list, kvp);
+    
+    opt = purple_account_option_list_new("Service", "service_mode", mode_list);
+    options = g_list_append(options, opt);
+    
+    /* Show presence toggle */
+    opt = purple_account_option_bool_new("Show online status to others",
+                                          "show_presence", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Sync history toggle */
+    opt = purple_account_option_bool_new("Sync message history on connect",
+                                          "sync_history", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* History limit */
+    opt = purple_account_option_int_new("Messages to sync per thread",
+                                         "sync_limit", 50);
+    options = g_list_append(options, opt);
+    
+    /* Mark as read automatically */
+    opt = purple_account_option_bool_new("Mark messages as read automatically",
+                                          "auto_read", TRUE);
+    options = g_list_append(options, opt);
+    
+    /* Debug mode */
+    opt = purple_account_option_bool_new("Enable debug logging",
+                                          "debug_mode", FALSE);
+    options = g_list_append(options, opt);
+    
+    return options;
+}
+
+/* ============================================================
+ * Plugin Loading/Unloading
+ * ============================================================ */
+
+gboolean meta_plugin_load(PurplePlugin *plugin)
+{
+    MetaConfig *config;
+    
+    meta_debug("Loading Meta protocol plugin v%s", META_PLUGIN_VERSION);
+    
+    /* Initialize configuration system */
+    config = meta_config_get();
+    if (!config) {
+        meta_warning("Failed to load configuration, using defaults");
+    } else {
+        meta_debug("Configuration loaded from: %s", 
+                   config->loaded_from ? config->loaded_from : "defaults");
+    }
+    
+    /* Validate configuration */
+    gchar *config_error = NULL;
+    if (config && !meta_config_validate(config, &config_error)) {
+        meta_warning("Configuration validation warning: %s", config_error);
+        g_free(config_error);
+    }
+    
+    /* Check if Instagram is enabled in config */
+    if (meta_config_is_instagram_enabled()) {
+        meta_debug("Instagram service is enabled");
+    } else {
+        meta_debug("Instagram service is disabled in configuration");
+    }
+    
+    /* Initialize account registry */
+    meta_accounts = g_hash_table_new(g_direct_hash, g_direct_equal);
+    
+    meta_debug("Meta protocol plugin loaded successfully");
+    return TRUE;
+}
+
+gboolean meta_plugin_unload(PurplePlugin *plugin)
+{
+    meta_debug("Unloading Meta protocol plugin");
+    
+    /* Cleanup account registry */
+    if (meta_accounts) {
+        g_hash_table_destroy(meta_accounts);
+        meta_accounts = NULL;
+    }
+    
+    /* Free configuration */
+    meta_config_free();
+    
+    return TRUE;
+}
+
+/* ============================================================
+ * libpurple 2.x Plugin Definition
+ * ============================================================ */
+
+#if PURPLE_VERSION == 2
+
+static const char *meta_list_icon(PurpleAccount *account, PurpleBuddy *buddy)
+{
+    (void)account;
+    (void)buddy;
+    return "meta";
+}
+
+static PurplePluginProtocolInfo prpl_info = {
+    .options = OPT_PROTO_CHAT_TOPIC | OPT_PROTO_IM_IMAGE,
+    .list_icon = meta_list_icon,
+    .login = meta_login,
+    .close = meta_close,
+    .send_im = meta_send_im,
+    .send_typing = meta_send_typing,
+    .status_types = meta_status_types,
+    .set_status = meta_set_status,
+    .add_buddy = meta_add_buddy,
+    .remove_buddy = meta_remove_buddy,
+    .chat_info = meta_chat_info,
+    .chat_info_defaults = meta_chat_info_defaults,
+    .join_chat = meta_join_chat,
+    .chat_leave = meta_chat_leave,
+    .chat_send = meta_chat_send,
+    .struct_size = sizeof(PurplePluginProtocolInfo),
+};
+
+static gboolean plugin_load(PurplePlugin *plugin)
+{
+    prpl_info.protocol_options = meta_protocol_get_account_options();
+    return meta_plugin_load(plugin);
+}
+
+static gboolean plugin_unload(PurplePlugin *plugin)
+{
+    return meta_plugin_unload(plugin);
+}
+
+static PurplePluginInfo info = {
+    .magic = PURPLE_PLUGIN_MAGIC,
+    .major_version = PURPLE_MAJOR_VERSION,
+    .minor_version = PURPLE_MINOR_VERSION,
+    .type = PURPLE_PLUGIN_PROTOCOL,
+    .priority = PURPLE_PRIORITY_DEFAULT,
+    .id = META_PLUGIN_ID,
+    .name = META_PLUGIN_NAME,
+    .version = META_PLUGIN_VERSION,
+    .summary = "Meta protocol plugin for Facebook Messenger and Instagram DMs",
+    .description = "Enables Pidgin to connect to Facebook Messenger and "
+                   "Instagram Direct Messages using Meta's Graph API and "
+                   "WebSocket connections.",
+    .author = META_PLUGIN_AUTHOR,
+    .homepage = META_PLUGIN_WEBSITE,
+    .load = plugin_load,
+    .unload = plugin_unload,
+    .extra_info = &prpl_info,
+    .actions = meta_actions,
+};
+
+static void init_plugin(PurplePlugin *plugin)
+{
+    /* Nothing to do here for now */
+}
+
+PURPLE_INIT_PLUGIN(meta, init_plugin, info)
+
+#else
+
+/* ============================================================
+ * libpurple 3.x Protocol Definition (GObject-based)
  * ============================================================ */
 
 static void meta_protocol_init(PurpleProtocol *protocol)
@@ -666,8 +890,8 @@ static void meta_protocol_class_init(PurpleProtocolClass *klass)
 static void meta_protocol_client_iface_init(PurpleProtocolClientInterface *iface)
 {
     iface->get_actions = meta_protocol_get_actions;
-    iface->status_text = NULL; /* TODO */
-    iface->tooltip_text = NULL; /* TODO */
+    iface->status_text = NULL;
+    iface->tooltip_text = NULL;
 }
 
 static void meta_protocol_server_iface_init(PurpleProtocolServerInterface *iface)
@@ -710,97 +934,10 @@ static void meta_protocol_class_finalize(PurpleProtocolClass *klass)
     /* Cleanup if needed */
 }
 
-/* ============================================================
- * Plugin Loading/Unloading
- * ============================================================ */
-
 static PurpleProtocol *meta_protocol_instance = NULL;
-
-gboolean meta_plugin_load(PurplePlugin *plugin)
-{
-    MetaConfig *config;
-    
-    meta_debug("Loading Meta protocol plugin v%s", META_PLUGIN_VERSION);
-    
-    /* Initialize configuration system */
-    config = meta_config_get();
-    if (!config) {
-        meta_warning("Failed to load configuration, using defaults");
-    } else {
-        meta_debug("Configuration loaded from: %s", 
-                   config->loaded_from ? config->loaded_from : "defaults");
-    }
-    
-    /* Validate configuration */
-    gchar *config_error = NULL;
-    if (config && !meta_config_validate(config, &config_error)) {
-        meta_warning("Configuration validation warning: %s", config_error);
-        g_free(config_error);
-    }
-    
-    /* Check if Instagram is enabled in config */
-    if (meta_config_is_instagram_enabled()) {
-        meta_debug("Instagram service is enabled");
-    } else {
-        meta_debug("Instagram service is disabled in configuration");
-    }
-    
-    /* Initialize account registry */
-    meta_accounts = g_hash_table_new(g_direct_hash, g_direct_equal);
-    
-    /* Register the protocol type */
-    meta_protocol_register_type(G_TYPE_MODULE(plugin));
-    
-    /* Create and register protocol instance */
-    meta_protocol_instance = g_object_new(
-        meta_protocol_get_type(),
-        "id", META_PLUGIN_ID,
-        "name", META_PLUGIN_NAME,
-        "options", OPT_PROTO_CHAT_TOPIC | OPT_PROTO_IM_IMAGE,
-        NULL
-    );
-    
-    if (!purple_protocols_add(meta_protocol_instance, plugin, NULL)) {
-        meta_error("Failed to register protocol");
-        g_object_unref(meta_protocol_instance);
-        return FALSE;
-    }
-    
-    meta_debug("Meta protocol plugin loaded successfully");
-    return TRUE;
-}
-
-gboolean meta_plugin_unload(PurplePlugin *plugin)
-{
-    meta_debug("Unloading Meta protocol plugin");
-    
-    /* Unregister protocol */
-    if (meta_protocol_instance) {
-        purple_protocols_remove(meta_protocol_instance, plugin, NULL);
-        g_object_unref(meta_protocol_instance);
-        meta_protocol_instance = NULL;
-    }
-    
-    /* Cleanup account registry */
-    if (meta_accounts) {
-        g_hash_table_destroy(meta_accounts);
-        meta_accounts = NULL;
-    }
-    
-    /* Free configuration */
-    meta_config_free();
-    
-    return TRUE;
-}
-
-/* ============================================================
- * Plugin Information (GPlugin/libpurple 3.0)
- * ============================================================ */
 
 static PurplePluginInfo *plugin_query(GError **error)
 {
-    GList *account_options = meta_protocol_get_account_options();
-    
     return purple_plugin_info_new(
         "id", META_PLUGIN_ID,
         "name", META_PLUGIN_NAME,
@@ -820,12 +957,43 @@ static PurplePluginInfo *plugin_query(GError **error)
 
 static gboolean plugin_load(PurplePlugin *plugin, GError **error)
 {
-    return meta_plugin_load(plugin);
+    if (!meta_plugin_load(plugin)) {
+        return FALSE;
+    }
+    
+    /* Register the protocol type */
+    meta_protocol_register_type(G_TYPE_MODULE(plugin));
+    
+    /* Create and register protocol instance */
+    meta_protocol_instance = g_object_new(
+        meta_protocol_get_type(),
+        "id", META_PLUGIN_ID,
+        "name", META_PLUGIN_NAME,
+        "options", OPT_PROTO_CHAT_TOPIC | OPT_PROTO_IM_IMAGE,
+        NULL
+    );
+    
+    if (!purple_protocols_add(meta_protocol_instance, plugin, NULL)) {
+        meta_error("Failed to register protocol");
+        g_object_unref(meta_protocol_instance);
+        return FALSE;
+    }
+    
+    return TRUE;
 }
 
 static gboolean plugin_unload(PurplePlugin *plugin, GError **error)
 {
+    /* Unregister protocol */
+    if (meta_protocol_instance) {
+        purple_protocols_remove(meta_protocol_instance, plugin, NULL);
+        g_object_unref(meta_protocol_instance);
+        meta_protocol_instance = NULL;
+    }
+    
     return meta_plugin_unload(plugin);
 }
 
 PURPLE_PLUGIN_INIT(meta, plugin_query, plugin_load, plugin_unload);
+
+#endif /* PURPLE_VERSION */

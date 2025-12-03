@@ -14,6 +14,22 @@
 #include <glib.h>
 #include <purple.h>
 
+/* Detect purple version if not set by build system */
+#ifndef PURPLE_VERSION
+#  if defined(PURPLE_MAJOR_VERSION) && PURPLE_MAJOR_VERSION >= 3
+#    define PURPLE_VERSION 3
+#  else
+#    define PURPLE_VERSION 2
+#  endif
+#endif
+
+/* Value type compatibility */
+#if PURPLE_VERSION == 2
+#  define PURPLE_TYPE_STRING  PURPLE_TYPE_STRING
+#else
+#  define PURPLE_TYPE_STRING  G_TYPE_STRING
+#endif
+
 /* Plugin identification */
 #define META_PLUGIN_ID      "prpl-meta"
 #define META_PLUGIN_NAME    "Meta (Messenger + Instagram)"
@@ -213,6 +229,13 @@ struct _MetaUser {
 gboolean meta_plugin_load(PurplePlugin *plugin);
 gboolean meta_plugin_unload(PurplePlugin *plugin);
 
+/* libpurple 2.x compatibility - define MetaProtocol as void for v2 */
+#if PURPLE_VERSION == 2
+typedef void MetaProtocol;
+#else
+typedef struct _MetaProtocol MetaProtocol;
+#endif
+
 /* Account management */
 MetaAccount *meta_account_new(PurpleAccount *pa);
 void meta_account_free(MetaAccount *account);
@@ -234,9 +257,15 @@ unsigned int meta_send_typing(PurpleConnection *gc, const char *name,
                                PurpleIMTypingState state);
 #endif
 
-/* Buddy list */
+/* Buddy list - signature differs between versions */
+#if PURPLE_VERSION == 2
+void meta_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy, 
+                    PurpleGroup *group);
+#else
 void meta_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy, 
                     PurpleGroup *group, const char *message);
+#endif
+
 void meta_remove_buddy(PurpleConnection *gc, PurpleBuddy *buddy, 
                        PurpleGroup *group);
 
