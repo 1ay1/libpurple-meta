@@ -976,7 +976,6 @@ static PurplePluginProtocolInfo prpl_info = {
 
 static gboolean plugin_load(PurplePlugin *plugin)
 {
-    prpl_info.protocol_options = meta_protocol_get_account_options();
     return meta_plugin_load(plugin);
 }
 
@@ -1008,7 +1007,8 @@ static PurplePluginInfo info = {
 
 static void init_plugin(PurplePlugin *plugin)
 {
-    /* Nothing to do here for now */
+    /* Set up account options - must be done in init, not load */
+    prpl_info.protocol_options = meta_protocol_get_account_options();
 }
 
 PURPLE_INIT_PLUGIN(meta, init_plugin, info)
@@ -1024,11 +1024,18 @@ static void meta_protocol_init(PurpleProtocol *protocol)
     /* Nothing special needed */
 }
 
+static GList *meta_protocol_get_account_options_v3(PurpleProtocol *protocol)
+{
+    (void)protocol;
+    return meta_protocol_get_account_options();
+}
+
 static void meta_protocol_class_init(PurpleProtocolClass *klass)
 {
     klass->login = meta_login;
     klass->close = meta_close;
     klass->status_types = meta_status_types;
+    klass->get_account_options = meta_protocol_get_account_options_v3;
 }
 
 static void meta_protocol_client_iface_init(PurpleProtocolClientInterface *iface)
