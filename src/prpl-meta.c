@@ -383,11 +383,19 @@ void meta_close(PurpleConnection *gc)
  * Messaging
  * ============================================================ */
 
+#if PURPLE_VERSION == 2
+int meta_send_im(PurpleConnection *gc, const char *who, const char *message, PurpleMessageFlags flags)
+{
+    MetaAccount *ma = META_GC_ACCOUNT(gc);
+    
+    (void)flags; /* unused in our implementation */
+#else
 int meta_send_im(PurpleConnection *gc, PurpleMessage *msg)
 {
     MetaAccount *ma = META_GC_ACCOUNT(gc);
     const char *who = purple_message_get_recipient(msg);
     const char *message = purple_message_get_contents(msg);
+#endif
     
     if (!ma || ma->state != META_STATE_CONNECTED) {
         return -1;
@@ -407,11 +415,19 @@ int meta_send_im(PurpleConnection *gc, PurpleMessage *msg)
     return -1; /* Failure */
 }
 
+#if PURPLE_VERSION == 2
+unsigned int meta_send_typing(PurpleConnection *gc, const char *name,
+                               PurpleTypingState state)
+{
+    MetaAccount *ma = META_GC_ACCOUNT(gc);
+    gboolean typing = (state == PURPLE_TYPING);
+#else
 unsigned int meta_send_typing(PurpleConnection *gc, const char *name,
                                PurpleIMTypingState state)
 {
     MetaAccount *ma = META_GC_ACCOUNT(gc);
     gboolean typing = (state == PURPLE_IM_TYPING);
+#endif
     
     if (!ma || ma->state != META_STATE_CONNECTED) {
         return 0;
@@ -541,6 +557,25 @@ void meta_join_chat(PurpleConnection *gc, GHashTable *components)
     
     meta_debug("Joining chat: %s", thread_id);
     
+#if PURPLE_VERSION == 2
+    /* Create the chat conversation */
+    PurpleConversation *conv = serv_got_joined_chat(gc, 
+                                       g_str_hash(thread_id), thread_id);
+    
+    /* Fetch thread info and participants */
+    if (ma->active && ma->active->get_thread) {
+        MetaThread *thread = ma->active->get_thread(ma, thread_id);
+        if (thread) {
+            /* Add participants */
+            GList *l;
+            for (l = thread->participants; l; l = l->next) {
+                MetaUser *user = l->data;
+                purple_conv_chat_add_user(PURPLE_CONV_CHAT(conv), user->display_name,
+                                          NULL, PURPLE_CBFLAGS_NONE, FALSE);
+            }
+        }
+    }
+#else
     /* Create the chat conversation */
     PurpleChatConversation *chat = purple_serv_got_joined_chat(gc, 
                                        g_str_hash(thread_id), thread_id);
@@ -559,6 +594,7 @@ void meta_join_chat(PurpleConnection *gc, GHashTable *components)
             }
         }
     }
+#endif
 }
 
 void meta_chat_leave(PurpleConnection *gc, int id)
@@ -567,6 +603,21 @@ void meta_chat_leave(PurpleConnection *gc, int id)
     /* Nothing special needed for Meta - we just close the window */
 }
 
+#if PURPLE_VERSION == 2
+int meta_chat_send(PurpleConnection *gc, int id, const char *message, PurpleMessageFlags flags)
+{
+    MetaAccount *ma = META_GC_ACCOUNT(gc);
+    PurpleConversation *conv = purple_find_chat(gc, id);
+    const char *thread_id;
+    
+    (void)flags; /* unused */
+    
+    if (!conv) {
+        return -1;
+    }
+    
+    thread_id = purple_conversation_get_name(conv);
+#else
 int meta_chat_send(PurpleConnection *gc, int id, PurpleMessage *msg)
 {
     MetaAccount *ma = META_GC_ACCOUNT(gc);
@@ -579,6 +630,7 @@ int meta_chat_send(PurpleConnection *gc, int id, PurpleMessage *msg)
     }
     
     thread_id = purple_conversation_get_name(PURPLE_CONVERSATION(chat));
+#endif
     
     if (!ma || ma->state != META_STATE_CONNECTED) {
         return -1;

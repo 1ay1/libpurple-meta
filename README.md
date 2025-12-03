@@ -45,9 +45,11 @@ This is an **unofficial** third-party plugin. It is not affiliated with, endorse
 - GIO 2.52+
 - json-glib 1.4+
 - zlib
-- libpurple 2.10+ or libpurple 3.0+
+- **libpurple 3.0+** (libpurple 2.x is not supported due to API differences)
 - Meson 0.56+
 - Ninja (or another Meson backend)
+
+> **Note**: This plugin requires libpurple 3.x (Pidgin 3). The libpurple 2.x API used by Pidgin 2 has significant differences in HTTP handling, message structures, and connection management that would require substantial rewrites to support.
 
 ### Optional Dependencies
 

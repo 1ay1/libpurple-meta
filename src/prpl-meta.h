@@ -224,9 +224,15 @@ void meta_logout(PurpleConnection *gc);
 void meta_close(PurpleConnection *gc);
 
 /* Messaging */
+#if PURPLE_VERSION == 2
+int meta_send_im(PurpleConnection *gc, const char *who, const char *message, PurpleMessageFlags flags);
+unsigned int meta_send_typing(PurpleConnection *gc, const char *name, 
+                               PurpleTypingState state);
+#else
 int meta_send_im(PurpleConnection *gc, PurpleMessage *msg);
 unsigned int meta_send_typing(PurpleConnection *gc, const char *name, 
                                PurpleIMTypingState state);
+#endif
 
 /* Buddy list */
 void meta_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy, 
@@ -242,7 +248,11 @@ GList *meta_chat_info(PurpleConnection *gc);
 GHashTable *meta_chat_info_defaults(PurpleConnection *gc, const char *room);
 void meta_join_chat(PurpleConnection *gc, GHashTable *components);
 void meta_chat_leave(PurpleConnection *gc, int id);
+#if PURPLE_VERSION == 2
+int meta_chat_send(PurpleConnection *gc, int id, const char *message, PurpleMessageFlags flags);
+#else
 int meta_chat_send(PurpleConnection *gc, int id, PurpleMessage *msg);
+#endif
 
 /* Utility macros */
 #define META_ACCOUNT(pa) (meta_account_get(pa))

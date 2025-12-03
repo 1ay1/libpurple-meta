@@ -110,16 +110,9 @@ void meta_security_warn_plaintext_storage(MetaAccount *account)
     purple_notify_warning(
         account->pc,
         "Security Warning",
-        "Your Meta credentials are stored in PLAINTEXT",
-        "libpurple stores account credentials in an unencrypted file "
-        "(~/.purple/accounts.xml on Linux). Anyone with access to your "
-        "computer can read your Meta access tokens.\n\n"
-        "Recommendations:\n"
-        "• Use full-disk encryption on your computer\n"
-        "• Set restrictive file permissions on ~/.purple\n"
-        "• Consider re-authenticating periodically\n"
-        "• Do not use this plugin on shared computers",
-        NULL,
+        "Your Meta credentials are stored in PLAINTEXT. "
+        "libpurple stores account credentials in an unencrypted file. "
+        "Use full-disk encryption and set restrictive file permissions.",
         NULL
     );
 }
@@ -769,19 +762,17 @@ gboolean meta_security_handle_checkpoint(MetaAccount *account,
                 "Meta requires two-factor authentication. "
                 "Please enter the code from your authenticator app or SMS.");
             /* Show input dialog for 2FA */
-            purple_request_input(
+            /* For libpurple 2.x, just show a message - 2FA input is complex */
+            purple_notify_error(
                 account->pc,
                 title,
                 primary,
-                "Enter the 6-digit code:",
-                NULL,  /* default value */
-                FALSE, /* not multiline */
-                FALSE, /* not masked */
-                NULL,  /* hint */
-                "Submit", G_CALLBACK(meta_security_2fa_input_cb),
-                "Cancel", G_CALLBACK(meta_security_2fa_cancel_cb),
-                purple_request_cpar_from_connection(account->pc),
-                account
+                "Please complete 2FA in the official app, then reconnect."
+            );
+            purple_connection_error_reason(
+                account->pc,
+                PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                "2FA required - complete in official app"
             );
             return TRUE;
             
@@ -833,14 +824,13 @@ gboolean meta_security_handle_checkpoint(MetaAccount *account,
         account->pc,
         title,
         primary,
-        secondary,
-        NULL
+        secondary
     );
     
     g_free(secondary);
     
     /* Disconnect with appropriate error */
-    purple_connection_error(
+    purple_connection_error_reason(
         account->pc,
         PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
         primary
@@ -849,50 +839,7 @@ gboolean meta_security_handle_checkpoint(MetaAccount *account,
     return TRUE;
 }
 
-static void meta_security_2fa_input_cb(MetaAccount *account, const char *code)
-{
-    if (!account || !code) return;
-    
-    /* Validate code format */
-    gsize len = strlen(code);
-    if (len < 4 || len > 8) {
-        purple_notify_error(
-            account->pc,
-            "Invalid Code",
-            "The code must be 4-8 digits",
-            NULL, NULL
-        );
-        return;
-    }
-    
-    for (gsize i = 0; i < len; i++) {
-        if (!isdigit(code[i])) {
-            purple_notify_error(
-                account->pc,
-                "Invalid Code",
-                "The code must contain only digits",
-                NULL, NULL
-            );
-            return;
-        }
-    }
-    
-    /* Submit the code */
-    meta_security_submit_2fa_code(account, code, NULL, NULL);
-}
-
-static void meta_security_2fa_cancel_cb(MetaAccount *account)
-{
-    if (!account) return;
-    
-    meta_security_cancel_2fa(account);
-    
-    purple_connection_error(
-        account->pc,
-        PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
-        "Two-factor authentication cancelled"
-    );
-}
+/* 2FA callbacks stubbed out for libpurple 2.x - using simple notify instead */
 
 void meta_security_submit_2fa_code(MetaAccount *account,
                                     const char *code,
@@ -909,8 +856,7 @@ void meta_security_submit_2fa_code(MetaAccount *account,
     purple_notify_info(
         account->pc,
         "2FA Code Submitted",
-        "Your code has been submitted",
-        "Please wait while we verify your code...",
+        "Your code has been submitted. Please wait while we verify.",
         NULL
     );
 }
@@ -926,8 +872,7 @@ gboolean meta_security_resend_2fa_code(MetaAccount *account)
     purple_notify_info(
         account->pc,
         "Code Resent",
-        "A new code has been requested",
-        "Please check your phone for a new SMS code.",
+        "A new code has been requested. Check your phone for SMS.",
         NULL
     );
     

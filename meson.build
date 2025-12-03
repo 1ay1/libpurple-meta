@@ -22,16 +22,21 @@ gio_dep = dependency('gio-2.0', version: '>= 2.52.0')
 json_glib_dep = dependency('json-glib-1.0', version: '>= 1.4.0')
 zlib_dep = dependency('zlib')
 
-# libpurple - try version 3 first, fall back to 2
+# libpurple 3 is required - libpurple 2.x API is too different
 purple3_dep = dependency('purple-3', required: false)
 if purple3_dep.found()
   purple_dep = purple3_dep
   purple_version = 3
   add_project_arguments('-DPURPLE_VERSION=3', language: 'c')
 else
-  purple_dep = dependency('purple', version: '>= 2.10.0')
-  purple_version = 2
-  add_project_arguments('-DPURPLE_VERSION=2', language: 'c')
+  # Try alternate name for purple 3
+  purple_dep = dependency('purple', version: '>= 3.0.0', required: false)
+  if purple_dep.found()
+    purple_version = 3
+    add_project_arguments('-DPURPLE_VERSION=3', language: 'c')
+  else
+    error('libpurple 3.x is required. libpurple 2.x is not supported due to API differences.')
+  endif
 endif
 
 # Optional: libsoup for alternative WebSocket implementation

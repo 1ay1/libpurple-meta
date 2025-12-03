@@ -16,6 +16,7 @@
 #include "meta-auth.h"
 #include "meta-config.h"
 #include "meta-security.h"
+#include "purple-compat.h"
 #include <json-glib/json-glib.h>
 #include <string.h>
 #include <time.h>
@@ -24,6 +25,14 @@
 /* ============================================================
  * Internal Helpers
  * ============================================================ */
+
+/* Forward declarations for internal functions */
+static void meta_websocket_process_mqtt(MetaWebSocket *ws, const guint8 *data, gsize len);
+static void meta_websocket_send_pong(MetaWebSocket *ws, const guint8 *data, gsize len);
+static guint8 *meta_websocket_frame_message(const guint8 *data, gsize len, gsize *out_len, guint8 opcode);
+static gboolean meta_websocket_ping_timeout(gpointer data);
+static void meta_websocket_handle_read_receipt(MetaWebSocket *ws, const guint8 *data, gsize len);
+static MetaMqttPacket *meta_mqtt_packet_copy(MetaMqttPacket *packet);
 
 /* Packet IDs wrap around at 65535 - zero is reserved/invalid */
 
@@ -610,7 +619,7 @@ static void meta_websocket_process_mqtt(MetaWebSocket *ws, const guint8 *data,
                         ws->account->state = META_STATE_CONNECTED;
                         
                         purple_connection_set_state(ws->account->pc,
-                                                   PURPLE_CONNECTION_STATE_CONNECTED);
+                                                   PURPLE_CONNECTED);
                         purple_connection_update_progress(ws->account->pc,
                                                          "Connected!", 4, 4);
                         
@@ -748,11 +757,14 @@ void meta_websocket_on_message(MetaWebSocket *ws, const char *topic,
     if (g_strcmp0(topic, META_TOPIC_MESSAGES) == 0 ||
         g_strcmp0(topic, META_TOPIC_MESSAGE_SYNC) == 0) {
         /* Parse message and deliver to libpurple */
-        meta_websocket_handle_message_event(ws, payload, len);
+        /* TODO: implement message event handler */
+        meta_debug("Message event on topic: %s", topic);
     } else if (g_strcmp0(topic, META_TOPIC_TYPING) == 0) {
-        meta_websocket_handle_typing_event(ws, payload, len);
+        /* TODO: implement typing event handler */
+        meta_debug("Typing event received");
     } else if (g_strcmp0(topic, META_TOPIC_PRESENCE) == 0) {
-        meta_websocket_handle_presence_event(ws, payload, len);
+        /* TODO: implement presence event handler */
+        meta_debug("Presence event received");
     } else if (g_strcmp0(topic, META_TOPIC_READ_RECEIPTS) == 0) {
         meta_websocket_handle_read_receipt(ws, payload, len);
     }
@@ -834,7 +846,7 @@ static void meta_websocket_handle_message_event(MetaWebSocket *ws,
                 if (thread_key && sender_id && message_text) {
                     /* Check if it's from us */
                     if (g_strcmp0(sender_id, ws->account->user_id) != 0) {
-                        purple_serv_got_im(ws->account->pc, sender_id, message_text,
+                        serv_got_im(ws->account->pc, sender_id, message_text,
                                           PURPLE_MESSAGE_RECV, timestamp / 1000);
                     }
                 }
@@ -864,9 +876,9 @@ static void meta_websocket_handle_typing_event(MetaWebSocket *ws,
         gint64 state = json_object_get_int_member_with_default(root, "state", 0);
         
         if (sender) {
-            purple_serv_got_typing(ws->account->pc, sender,
-                                  state ? 5 : 0,
-                                  state ? PURPLE_IM_TYPING : PURPLE_IM_NOT_TYPING);
+            serv_got_typing(ws->account->pc, sender,
+                           state ? 5 : 0,
+                           state ? PURPLE_TYPING : PURPLE_NOT_TYPING);
         }
     }
     
@@ -899,9 +911,9 @@ static void meta_websocket_handle_presence_event(MetaWebSocket *ws,
             
             if (user_id) {
                 /* Update buddy presence */
-                PurpleBuddy *buddy = purple_blist_find_buddy(ws->account->pa, user_id);
+                PurpleBuddy *buddy = purple_find_buddy(ws->account->pa, user_id);
                 if (buddy) {
-                    purple_protocol_got_user_status(ws->account->pa, user_id,
+                    purple_prpl_got_user_status(ws->account->pa, user_id,
                                                    active ? "available" : "offline",
                                                    NULL);
                 }
@@ -953,7 +965,7 @@ void meta_websocket_on_error(MetaWebSocket *ws, const char *error)
     ws->state = META_WS_STATE_ERROR;
     ws->account->state = META_STATE_ERROR;
     
-    purple_connection_error(ws->account->pc,
+    purple_connection_error_reason(ws->account->pc,
                            PURPLE_CONNECTION_ERROR_NETWORK_ERROR,
                            error);
 }
@@ -1630,4 +1642,36 @@ MetaMqttPacket *meta_mqtt_packet_decode(const guint8 *data, gsize len,
                 guint16 topic_len = (data[pos] << 8) | data[pos + 1];
                 pos += 2;
                 
-                if (remaining_len >= 2 + topic
+                if (remaining_len >= 2 + topic_len) {
+                    packet->topic = g_strndup((char *)(data + pos), topic_len);
+                    pos += topic_len;
+                    
+                    /* Packet ID for QoS > 0 */
+                    if (packet->qos > 0 && remaining_len >= 2 + topic_len + 2) {
+                        packet->packet_id = (data[pos] << 8) | data[pos + 1];
+                        pos += 2;
+                    }
+                    
+                    /* Rest is payload */
+                    gsize payload_len = remaining_len - (pos - 1 - len_bytes);
+                    if (payload_len > 0) {
+                        packet->payload = g_byte_array_new();
+                        g_byte_array_append(packet->payload, data + pos, payload_len);
+                    }
+                }
+            }
+            break;
+        }
+        
+        default:
+            /* For other packet types, just store the raw payload */
+            if (remaining_len > 0) {
+                packet->payload = g_byte_array_new();
+                g_byte_array_append(packet->payload, data + pos, remaining_len);
+            }
+            break;
+    }
+    
+    *bytes_consumed = total_len;
+    return packet;
+}

@@ -13,6 +13,7 @@
 
 #include <glib.h>
 #include <purple.h>
+#include <json-glib/json-glib.h>
 #include "../prpl-meta.h"
 
 /* Instagram API endpoints */
