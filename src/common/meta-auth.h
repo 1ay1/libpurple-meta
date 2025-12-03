@@ -18,8 +18,8 @@
 /* OAuth configuration */
 #define META_OAUTH_CLIENT_ID        "YOUR_META_APP_ID"
 #define META_OAUTH_REDIRECT_URI     "https://localhost/oauth/callback"
-#define META_OAUTH_SCOPE_MESSENGER  "pages_messaging,pages_read_engagement"
-#define META_OAUTH_SCOPE_INSTAGRAM  "instagram_basic,instagram_manage_messages"
+#define META_OAUTH_SCOPE_MESSENGER  "pages_manage_metadata,pages_messaging,pages_read_engagement,pages_show_list"
+#define META_OAUTH_SCOPE_INSTAGRAM  "instagram_manage_messages,pages_manage_metadata,pages_messaging,pages_read_engagement,pages_show_list"
 
 /* Meta API endpoints */
 #define META_OAUTH_AUTH_URL         "https://www.facebook.com/v18.0/dialog/oauth"

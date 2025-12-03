@@ -16,7 +16,7 @@
 
     "oauth_client_id": "YOUR_META_APP_ID_HERE",
     "oauth_redirect_uri": "https://localhost/oauth/callback",
-    "oauth_scope": "pages_messaging,pages_read_engagement",
+    "oauth_scope": "pages_manage_metadata,pages_messaging,pages_read_engagement,pages_show_list",
 
     "rate_limit_calls": 200,
     "rate_limit_window": 3600,
