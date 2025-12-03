@@ -247,6 +247,8 @@ gchar *meta_auth_build_auth_url(MetaAccount *account,
                                  const char *code_challenge)
 {
     const gchar *auth_url;
+    const gchar *client_id;
+    const gchar *redirect_uri;
     GString *url;
     const char *scope;
     
@@ -254,6 +256,18 @@ gchar *meta_auth_build_auth_url(MetaAccount *account,
     auth_url = meta_config_get_oauth_auth_url();
     if (!auth_url || auth_url[0] == '\0') {
         auth_url = META_OAUTH_AUTH_URL;
+    }
+    
+    /* Get client ID from account settings first, then fall back to config */
+    client_id = meta_config_get_oauth_client_id_for_account(account->pa);
+    if (!client_id || client_id[0] == '\0') {
+        client_id = META_OAUTH_CLIENT_ID;
+    }
+    
+    /* Get redirect URI from account settings first, then fall back to config */
+    redirect_uri = meta_config_get_oauth_redirect_uri_for_account(account->pa);
+    if (!redirect_uri || redirect_uri[0] == '\0') {
+        redirect_uri = META_OAUTH_REDIRECT_URI;
     }
     
     url = g_string_new(auth_url);
@@ -272,9 +286,9 @@ gchar *meta_auth_build_auth_url(MetaAccount *account,
             break;
     }
     
-    g_string_append_printf(url, "?client_id=%s", META_OAUTH_CLIENT_ID);
+    g_string_append_printf(url, "?client_id=%s", client_id);
     
-    gchar *encoded_redirect = g_uri_escape_string(META_OAUTH_REDIRECT_URI, NULL, TRUE);
+    gchar *encoded_redirect = g_uri_escape_string(redirect_uri, NULL, TRUE);
     g_string_append_printf(url, "&redirect_uri=%s", encoded_redirect);
     g_free(encoded_redirect);
     
@@ -687,11 +701,27 @@ void meta_auth_exchange_code(MetaAccount *account,
 {
     GString *post_data = g_string_new(NULL);
     MetaHttpRequest *request;
+    const gchar *client_id;
+    const gchar *client_secret;
+    const gchar *redirect_uri;
+    
+    /* Get credentials from account settings first, then fall back to config */
+    client_id = meta_config_get_oauth_client_id_for_account(account->pa);
+    if (!client_id || client_id[0] == '\0') {
+        client_id = META_OAUTH_CLIENT_ID;
+    }
+    
+    client_secret = purple_account_get_string(account->pa, "oauth_client_secret", NULL);
+    
+    redirect_uri = meta_config_get_oauth_redirect_uri_for_account(account->pa);
+    if (!redirect_uri || redirect_uri[0] == '\0') {
+        redirect_uri = META_OAUTH_REDIRECT_URI;
+    }
     
     /* Build POST data */
-    g_string_append_printf(post_data, "client_id=%s", META_OAUTH_CLIENT_ID);
+    g_string_append_printf(post_data, "client_id=%s", client_id);
     
-    gchar *encoded_redirect = g_uri_escape_string(META_OAUTH_REDIRECT_URI, NULL, TRUE);
+    gchar *encoded_redirect = g_uri_escape_string(redirect_uri, NULL, TRUE);
     g_string_append_printf(post_data, "&redirect_uri=%s", encoded_redirect);
     g_free(encoded_redirect);
     
@@ -701,8 +731,12 @@ void meta_auth_exchange_code(MetaAccount *account,
     
     g_string_append(post_data, "&grant_type=authorization_code");
     
-    /* Note: In production, client_secret should be handled securely */
-    /* For PKCE flow, we'd include the code_verifier instead */
+    /* Add client secret if provided */
+    if (client_secret && client_secret[0] != '\0') {
+        gchar *encoded_secret = g_uri_escape_string(client_secret, NULL, TRUE);
+        g_string_append_printf(post_data, "&client_secret=%s", encoded_secret);
+        g_free(encoded_secret);
+    }
     
     /* Create HTTP request using config URL */
     const gchar *token_url = meta_config_get_oauth_token_url();
@@ -958,13 +992,20 @@ void meta_auth_refresh_token(MetaAccount *account,
      * We need to exchange for a new long-lived token before expiry */
     MetaHttpRequest *request;
     gchar *url;
+    const gchar *client_id;
+    
+    /* Get client ID from account settings first, then fall back to config */
+    client_id = meta_config_get_oauth_client_id_for_account(account->pa);
+    if (!client_id || client_id[0] == '\0') {
+        client_id = META_OAUTH_CLIENT_ID;
+    }
     
     url = g_strdup_printf("%s/oauth/access_token"
                           "?grant_type=fb_exchange_token"
                           "&client_id=%s"
                           "&fb_exchange_token=%s",
                           META_GRAPH_API_BASE,
-                          META_OAUTH_CLIENT_ID,
+                          client_id,
                           account->access_token);
     
     request = meta_http_request_new(url);
