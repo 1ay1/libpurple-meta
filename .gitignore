@@ -1,0 +1,90 @@
+# Build directories
+build/
+builddir/
+_build/
+
+# Meson generated files
+meson-logs/
+meson-info/
+.ninja_deps
+.ninja_log
+compile_commands.json
+
+# Object files and libraries
+*.o
+*.obj
+*.so
+*.so.*
+*.dll
+*.dylib
+*.a
+*.lib
+*.la
+*.lo
+
+# Debug files
+*.dSYM/
+*.pdb
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.*.swp
+.project
+.cproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.atom/
+*.code-workspace
+.vs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Test output
+test-results/
+*.gcov
+*.gcda
+*.gcno
+coverage/
+.coverage
+
+# Distribution / packaging
+dist/
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+*.zip
+*.deb
+*.rpm
+
+# Config files with local overrides
+meta-config.local.json
+*.local.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Core dumps
+core
+core.*
+
+# pkg-config generated
+*.pc
+
+# Logs
+*.log

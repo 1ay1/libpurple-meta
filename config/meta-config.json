@@ -1,0 +1,106 @@
+{
+  "_comment": "libpurple-meta configuration file",
+  "_doc": "Place this file at ~/.purple/meta-config.json to override defaults",
+  "version": 1,
+  "last_updated": 0,
+  "update_url": "https://raw.githubusercontent.com/libpurple-meta/libpurple-meta/main/config/meta-config.json",
+
+  "messenger": {
+    "_comment": "Facebook Messenger / Graph API settings",
+    "oauth_auth_url": "https://www.facebook.com/v18.0/dialog/oauth",
+    "oauth_token_url": "https://graph.facebook.com/v18.0/oauth/access_token",
+    "graph_api_base": "https://graph.facebook.com/v18.0",
+    "mqtt_endpoint": "wss://edge-chat.facebook.com/chat",
+    "mqtt_origin": "https://www.facebook.com",
+    "graph_api_version": "v18.0",
+
+    "oauth_client_id": "YOUR_META_APP_ID_HERE",
+    "oauth_redirect_uri": "https://localhost/oauth/callback",
+    "oauth_scope": "pages_messaging,pages_read_engagement",
+
+    "rate_limit_calls": 200,
+    "rate_limit_window": 3600,
+    "min_request_interval_ms": 100
+  },
+
+  "instagram": {
+    "_comment": "Instagram Private API settings - may need frequent updates",
+    "api_base": "https://i.instagram.com/api/v1",
+    "graphql_api": "https://www.instagram.com/api/graphql",
+    "realtime_url": "wss://edge-chat.instagram.com/chat",
+    "upload_url": "https://i.instagram.com/rupload_igphoto/",
+
+    "app_version": "275.0.0.27.98",
+    "version_code": "458229237",
+    "sig_key_version": "4",
+
+    "user_agent": "Instagram 275.0.0.27.98 Android (30/11; 420dpi; 1080x2220; samsung; SM-G975F; beyond2; exynos9820; en_US; 458229237)",
+
+    "device_manufacturer": "samsung",
+    "device_model": "SM-G975F",
+    "android_version": "30",
+    "android_release": "11",
+
+    "rate_limit_calls": 100,
+    "rate_limit_window": 3600,
+    "min_request_interval_ms": 200,
+
+    "x_ig_capabilities": "3brTvwE=",
+    "x_ig_connection_type": "WIFI",
+    "x_ig_app_id": "567067343352427"
+  },
+
+  "websocket": {
+    "_comment": "WebSocket/MQTT connection settings",
+    "connect_timeout": 30,
+    "ping_interval": 30,
+    "pong_timeout": 10,
+    "reconnect_delay": 5,
+    "max_reconnect_delay": 300,
+    "max_reconnect_attempts": 10,
+
+    "topic_messages": "/t_ms",
+    "topic_message_sync": "/messaging_events",
+    "topic_typing": "/typing",
+    "topic_presence": "/presence",
+    "topic_read_receipts": "/t_rt",
+    "topic_thread_updates": "/thread_updates",
+
+    "ig_topic_direct": "/ig_direct",
+    "ig_topic_message_sync": "/ig_message_sync",
+    "ig_topic_realtime": "/ig_realtime_sub"
+  },
+
+  "security": {
+    "_comment": "Security settings - be careful changing these",
+    "warn_plaintext_storage": true,
+    "obfuscate_tokens": true,
+    "max_token_age": 86400,
+    "max_failed_logins": 5,
+    "login_lockout_duration": 3600,
+    "require_tls_1_2": true,
+    "verify_certificates": true,
+    "initial_backoff": 1,
+    "max_backoff": 600,
+    "backoff_multiplier": 2
+  },
+
+  "features": {
+    "_comment": "Feature flags - disable features that are broken or causing issues",
+    "messenger_enabled": true,
+    "instagram_enabled": true,
+    "presence_enabled": true,
+    "typing_enabled": true,
+    "read_receipts_enabled": true,
+    "reactions_enabled": true,
+    "attachments_enabled": true,
+    "group_chats_enabled": true,
+    "ig_pending_inbox_enabled": true,
+    "ig_disappearing_enabled": true,
+    "ig_voice_enabled": true
+  },
+
+  "debug_mode": false,
+  "log_api_calls": false,
+  "log_websocket": false
+}
