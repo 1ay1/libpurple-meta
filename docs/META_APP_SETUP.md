@@ -120,11 +120,17 @@ The Basic Settings page contains these important fields:
 3. **App domains:** Add `localhost` for OAuth callback:
    - Type `localhost` in the App domains field and press Enter
 
-4. **User data deletion:** Select "Data deletion instructions URL" from the dropdown and enter:
-   ```
-   https://localhost/oauth/delete
-   ```
-   (Or provide actual instructions if you have them)
+4. **User data deletion:** You have two options in the dropdown:
+   
+   - **Option A (Recommended):** Select **"Data deletion instructions"** and enter:
+     ```
+     To delete your data, remove the account from Pidgin (Accounts → Manage Accounts → Delete), 
+     then delete ~/.purple/accounts.xml and ~/.purple/meta-config.json. 
+     No data is stored on any server by this plugin.
+     ```
+   
+   - **Option B:** Select **"Data deletion callback URL"** and enter a valid URL you control.
+     (Note: `https://localhost/...` URLs will fail validation since Meta cannot reach them)
 
 5. Click **"Save changes"** at the bottom of the page
 
