@@ -339,10 +339,62 @@ void meta_login(PurpleAccount *account)
         ma->active = ma->messenger;
     }
     
-    /* Check for stored access token using secure retrieval */
+    /* Check for stored credentials using secure retrieval */
     ma->access_token = meta_security_retrieve_token(ma, "access_token");
     ma->session_cookies = meta_security_retrieve_token(ma, "session_cookies");
     
+    /* Instagram uses session cookies / private API - not OAuth */
+    if (ma->mode == META_SERVICE_INSTAGRAM) {
+        meta_debug("Instagram mode - using private API authentication");
+        
+#if PURPLE_VERSION == 2
+        purple_connection_update_progress(gc, "Connecting to Instagram...", 2, 4);
+#endif
+        
+        /* Check for stored session cookies first */
+        if (ma->session_cookies && strlen(ma->session_cookies) > 0) {
+            meta_debug("Found stored session cookies, attempting connection...");
+            ma->state = META_STATE_AUTHENTICATING;
+            
+            /* Connect using session cookies */
+            if (ma->active && ma->active->connect) {
+                if (ma->active->connect(ma)) {
+                    ma->state = META_STATE_CONNECTED;
+#if PURPLE_VERSION == 2
+                    purple_connection_set_state(gc, PURPLE_CONNECTED);
+                    purple_connection_update_progress(gc, "Connected", 4, 4);
+#else
+                    purple_connection_set_state(gc, PURPLE_CONNECTION_STATE_CONNECTED);
+#endif
+                } else {
+                    meta_debug("Instagram connection failed");
+#if PURPLE_VERSION == 2
+                    purple_connection_error_reason(gc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR,
+                                            "Failed to connect to Instagram");
+#else
+                    purple_connection_error(gc, PURPLE_CONNECTION_ERROR_NETWORK_ERROR,
+                                            "Failed to connect to Instagram");
+#endif
+                }
+            }
+        } else {
+            /* No session - Instagram private API requires manual cookie import for now */
+            /* TODO: Implement username/password login with 2FA support */
+            meta_debug("No Instagram session found");
+#if PURPLE_VERSION == 2
+            purple_connection_error_reason(gc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                "Instagram requires session cookies. Please export cookies from your browser "
+                "and add them to ~/.purple/meta-config.json or use the Messenger service instead.");
+#else
+            purple_connection_error(gc, PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                "Instagram requires session cookies. Please export cookies from your browser "
+                "and add them to ~/.purple/meta-config.json or use the Messenger service instead.");
+#endif
+        }
+        return;
+    }
+    
+    /* Messenger uses OAuth */
     if (ma->access_token && strlen(ma->access_token) > 0) {
         /* Validate token format before using */
         if (!meta_security_validate_token_format(ma->access_token)) {
