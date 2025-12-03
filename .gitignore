@@ -88,3 +88,4 @@ core.*
 
 # Logs
 *.log
+.cache/
