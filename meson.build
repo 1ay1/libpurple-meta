@@ -138,6 +138,7 @@ prpl_meta = shared_library(plugin_name,
   install: true,
   install_dir: plugin_install_dir,
   name_prefix: '',
+  name_suffix: 'so',
 )
 
 # Install configuration file
